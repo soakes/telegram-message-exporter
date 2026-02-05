@@ -209,7 +209,7 @@ def _resolve_peer_id(
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="Telegram Desktop (macOS) message recovery tools",
+        description="Telegram for macOS message recovery tools",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(

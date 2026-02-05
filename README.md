@@ -1,15 +1,15 @@
-# 💬 Telegram Message Exporter (macOS Desktop)
+# 💬 Telegram for macOS Message Exporter
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-macOS-111111.svg)](#)
-[![Telegram](https://img.shields.io/badge/Telegram-Desktop-2CA5E0.svg)](https://desktop.telegram.org/)
+[![Telegram](https://img.shields.io/badge/Telegram-macOS-2CA5E0.svg)](https://macos.telegram.org/)
 [![CI](https://github.com/soakes/telegram-message-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/soakes/telegram-message-exporter/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://black.readthedocs.io/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-262626.svg)](https://docs.astral.sh/ruff/)
 [![Pylint](https://img.shields.io/badge/lint-pylint-ffcd00.svg)](https://pylint.readthedocs.io/)
 
-A professional, offline recovery and export tool for **Telegram Desktop (macOS)**. It decrypts the local `db_sqlite` using `.tempkeyEncrypted` and produces a clean, readable transcript in **HTML**, **Markdown**, or **CSV**.
+A professional, offline recovery and export tool for the **native Telegram for macOS app** (not the cross‑platform Telegram Desktop/Qt app). It decrypts the local `db_sqlite` using `.tempkeyEncrypted` and produces a clean, readable transcript in **HTML**, **Markdown**, or **CSV**.
 
 ## Table of Contents
 
@@ -39,9 +39,11 @@ A professional, offline recovery and export tool for **Telegram Desktop (macOS)*
 
 ## Overview
 
-Telegram Desktop stores messages locally in an encrypted SQLite database. This tool decrypts the local database, parses Telegram’s Postbox structure, and exports a clean transcript that a non‑technical user can read.
+Telegram for macOS stores messages locally in an encrypted SQLite database. This tool decrypts the local database, parses Telegram’s Postbox structure, and exports a clean transcript that a non‑technical user can read.
 
 It is designed for **offline recovery** on a Mac where the local cache still exists and has not yet synced a deletion.
+
+Compatibility note: this targets the **native Telegram for macOS** app (macos.telegram.org / Homebrew cask `telegram`). The cross‑platform Telegram Desktop (Qt) app uses a different storage layout.
 
 ---
 
@@ -81,7 +83,7 @@ What it does not do:
 
 ## Requirements
 
-- macOS with Telegram Desktop data present
+- macOS with Telegram for macOS data present (native app)
 - Python 3.10 or higher (tested on 3.11–3.13)
 - Virtual environment recommended
 
@@ -219,7 +221,7 @@ Common flags:
     <div class="logo">💬</div>
     <div class="title-area">
       <h1>Alex Example</h1>
-      <p class="subtitle">Recovery export for Telegram Desktop (macOS)</p>
+      <p class="subtitle">Recovery export for Telegram for macOS</p>
     </div>
   </div>
   <div class="badge glass"><span class="dot"></span><span class="text">Ready</span></div>
@@ -252,7 +254,7 @@ date,time,timestamp,direction,speaker,text,peer_id,author_id
 
 ## Key Paths (macOS)
 
-Telegram Desktop stores its data here:
+Telegram for macOS stores its data here:
 
 - `~/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable/`
 - `.../account-*/postbox/db/db_sqlite`
@@ -292,8 +294,8 @@ Only files that were downloaded and cached locally can be recovered.
 **What if I get “file is not a database”?**  
 The key and DB are mismatched, or Passcode Lock is enabled without the passcode.
 
-**Does it work on Windows or mobile backups?**  
-No. This targets Telegram Desktop on macOS and its local storage layout.
+**Does it work with Telegram Desktop (Qt) or mobile backups?**  
+No. This targets the native Telegram for macOS app and its local storage layout.
 
 ---
 
@@ -371,7 +373,7 @@ telegram-message-exporter/
 
 ## Credits
 
-This project builds on community reverse‑engineering work. Special thanks to **[@stek29](https://github.com/stek29)** for the original research and [reference implementation](https://gist.github.com/stek29/8a7ac0e673818917525ec4031d77a713) of Telegram Desktop’s local key format and Postbox structure. This tool extends those ideas into a polished, end‑user‑friendly CLI and export workflow.
+This project builds on community reverse‑engineering work. Special thanks to **[@stek29](https://github.com/stek29)** for the original research and [reference implementation](https://gist.github.com/stek29/8a7ac0e673818917525ec4031d77a713) of Telegram for macOS local key format and Postbox structure. This tool extends those ideas into a polished, end‑user‑friendly CLI and export workflow.
 
 ---
 
