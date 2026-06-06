@@ -541,7 +541,7 @@ Use the helper script when preparing a version bump:
 
 ## 🧹 Quality Checks
 
-The CI workflow runs Black, Ruff, and Pylint across Python 3.10 through 3.13.
+The CI workflow runs Black, Ruff, and Pylint across Python 3.10 through 3.14.
 
 ```bash
 pip install black ruff pylint
