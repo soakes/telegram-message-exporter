@@ -24,3 +24,8 @@ def murmur_hash(data: bytes, seed: int = TEMPKEY_MURMUR_SEED) -> int:
 def murmur_hash_bytes(data: bytes, seed: int) -> bytes:
     """Return Murmur3 hash bytes for the given data."""
     return mmh3.hash_bytes(data, seed=seed)
+
+
+def persistent_hash32(value: str) -> int:
+    """Return Telegram/Postbox persistentHash32-compatible output."""
+    return mmh3.hash(value, seed=0, signed=True)

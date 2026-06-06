@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import sqlite3
+import struct
+import sys
+import time
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from .models import Message
+from .schema import PostboxTable
 from .utils import parse_timestamp
 
 
@@ -33,8 +37,9 @@ def detect_column(cols: list[tuple], names: Iterable[str]) -> Optional[str]:
 def detect_message_table(conn: sqlite3.Connection) -> str:
     """Best-effort detection of a messages table."""
     tables = list_tables(conn)
-    if "t7" in tables:
-        return "t7"
+    message_table = PostboxTable.MESSAGE_HISTORY.sqlite_name
+    if message_table in tables:
+        return message_table
     if "messages" in tables:
         return "messages"
 
@@ -140,6 +145,132 @@ class FetchOptions:
     limit: Optional[int] = None
     start_ts: Optional[int] = None
     end_ts: Optional[int] = None
+
+
+def _prefix_successor(prefix: bytes) -> Optional[bytes]:
+    """Return the smallest byte string greater than every key with this prefix."""
+    successor = bytearray(prefix)
+    for index in range(len(successor) - 1, -1, -1):
+        if successor[index] != 0xFF:
+            successor[index] += 1
+            return bytes(successor[: index + 1])
+    return None
+
+
+def _postbox_key_prefix(peer_id: int) -> bytes:
+    """Encode the peer-id prefix of a MessageHistoryTable key."""
+    return struct.pack(">q", peer_id)
+
+
+def _postbox_range_query(
+    table: str,
+    lower: bytes,
+    upper: Optional[bytes],
+) -> tuple[str, tuple[bytes, ...]]:
+    query = f"SELECT key, value FROM {table} WHERE key >= ?"
+    params = (lower,)
+    if upper is not None:
+        query += " AND key < ?"
+        params += (upper,)
+    return query + " ORDER BY key", params
+
+
+def _debug_postbox_query(
+    conn: sqlite3.Connection,
+    label: str,
+    query: str,
+    params: tuple[object, ...] = (),
+) -> None:
+    """Print SQL and query-plan diagnostics for a Postbox lookup."""
+    print(f"[query] {label}", file=sys.stderr)
+    print(f"[query] SQL: {query}", file=sys.stderr)
+    for index, param in enumerate(params, start=1):
+        if isinstance(param, bytes):
+            display = f"X'{param.hex()}'"
+        else:
+            display = repr(param)
+        print(f"[query] param {index}: {display}", file=sys.stderr)
+    for plan_row in conn.execute(f"EXPLAIN QUERY PLAN {query}", params):
+        print(f"[query] plan: {plan_row[3]}", file=sys.stderr)
+
+
+def _iter_query(
+    conn: sqlite3.Connection,
+    label: str,
+    query: str,
+    params: tuple[object, ...] = (),
+    debug: bool = False,
+) -> Iterable[tuple]:
+    """Stream query rows and optionally report diagnostics."""
+    if debug:
+        _debug_postbox_query(conn, label, query, params)
+    started_at = time.monotonic()
+    row_count = 0
+    try:
+        for row in conn.execute(query, params):
+            row_count += 1
+            yield row
+    finally:
+        if debug:
+            elapsed = time.monotonic() - started_at
+            print(
+                f"[query] consumed {row_count} rows in {elapsed:.3f}s: {label}",
+                file=sys.stderr,
+            )
+
+
+def iter_postbox_message_rows(
+    conn: sqlite3.Connection,
+    table: str,
+    options: FetchOptions,
+    debug: bool = False,
+) -> Iterable[tuple]:
+    """Stream Postbox message rows using the BLOB key index when possible."""
+    if options.peer_id is None:
+        query = f"SELECT key, value FROM {table} ORDER BY key"
+        yield from _iter_query(
+            conn,
+            "all peers (full ordered scan)",
+            query,
+            debug=debug,
+        )
+        return
+
+    peer_prefix = _postbox_key_prefix(options.peer_id)
+    query, params = _postbox_range_query(
+        table,
+        peer_prefix,
+        _prefix_successor(peer_prefix),
+    )
+    yield from _iter_query(
+        conn,
+        f"peer {options.peer_id} (single key range)",
+        query,
+        params,
+        debug,
+    )
+
+
+def iter_postbox_peer_rows(
+    conn: sqlite3.Connection,
+    table: str,
+    peer_ids: Iterable[int],
+    debug: bool = False,
+) -> Iterable[tuple]:
+    """Fetch selected Postbox peer rows through exact key lookups."""
+    keys = tuple(struct.pack(">q", peer_id) for peer_id in sorted(set(peer_ids)))
+    if not keys:
+        return
+
+    placeholders = ", ".join("?" for _ in keys)
+    query = f"SELECT key, value FROM {table} WHERE key IN ({placeholders})"
+    yield from _iter_query(
+        conn,
+        f"selected peers ({len(keys)} exact keys)",
+        query,
+        keys,
+        debug,
+    )
 
 
 @dataclass(frozen=True)

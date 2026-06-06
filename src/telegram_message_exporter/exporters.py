@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import csv
 import html
-from dataclasses import dataclass
+import json
+import shutil
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from .models import Message
+from .models import Attachment, Message
 from .utils import linkify_html, linkify_markdown
 
 HTML_BOOTSTRAP = (
@@ -199,7 +201,14 @@ header.header-panel {
   word-break: break-word;
 }
 .msg.out .bubble { background: var(--bubble-out); }
+.bubble img, .bubble video { max-width: 100%; height: auto; border-radius: 10px; }
+.bubble audio { width: min(420px, 100%); }
 .meta { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.forwarded {
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+  color: #bae6fd;
+}
 .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
 a { color: var(--accent); text-decoration: none; word-break: break-word; overflow-wrap: anywhere; }
 a:hover { text-decoration: underline; }
@@ -244,6 +253,78 @@ class RenderOptions:
     show_direction: bool = False
 
 
+def copy_message_media(  # pylint: disable=too-many-locals
+    messages: list[Message],
+    media_dir: Path,
+    out_path: Path,
+) -> tuple[list[Message], int]:
+    """Copy referenced cached media and attach relative export paths."""
+    target_dir = out_path.parent / f"{out_path.stem}_media"
+    copied_keys: set[str] = set()
+    copied_count = 0
+    updated_messages: list[Message] = []
+    for message in messages:
+        updated_attachments: list[Attachment] = []
+        for attachment in message.attachments:
+            cache_keys = tuple(
+                key
+                for key in (
+                    attachment.cache_key,
+                    *attachment.alternate_cache_keys,
+                )
+                if key
+            )
+            direct_source = (
+                Path(attachment.source_path).expanduser()
+                if attachment.source_path
+                else None
+            )
+            if not cache_keys and (
+                direct_source is None or not direct_source.is_file()
+            ):
+                updated_attachments.append(attachment)
+                continue
+            selected_key = next(
+                (key for key in cache_keys if (media_dir / key).is_file()),
+                None,
+            )
+            if selected_key is not None:
+                source = media_dir / selected_key
+                target_name = _safe_media_filename(selected_key)
+            elif direct_source is not None and direct_source.is_file():
+                source = direct_source
+                target_name = _safe_media_filename(
+                    attachment.cache_key or direct_source.name or "local-attachment"
+                )
+            else:
+                updated_attachments.append(attachment)
+                continue
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / target_name
+            if target_name not in copied_keys:
+                shutil.copy2(source, target)
+                copied_keys.add(target_name)
+                copied_count += 1
+            updated_attachments.append(
+                replace(
+                    attachment,
+                    exported_path=(Path(target_dir.name) / target_name).as_posix(),
+                )
+            )
+        updated_messages.append(
+            replace(message, attachments=tuple(updated_attachments))
+        )
+    return updated_messages, copied_count
+
+
+def _safe_media_filename(value: str) -> str:
+    """Keep exported media paths inside the generated media directory."""
+    safe = Path(value).name.replace("/", "_").replace("\\", "_")
+    if safe in {"", ".", ".."}:
+        return "attachment"
+    return safe
+
+
 def resolve_speaker(
     msg: Message, peer_map: Optional[dict[int, str]], me_name: str
 ) -> str:
@@ -256,6 +337,68 @@ def resolve_speaker(
         if msg.peer_id and msg.peer_id in peer_map:
             return peer_map[msg.peer_id]
     return "Unknown"
+
+
+def _resolve_peer_name(
+    peer_id: Optional[int],
+    peer_map: Optional[dict[int, str]],
+) -> Optional[str]:
+    if peer_id is None or not peer_map:
+        return None
+    return peer_map.get(peer_id)
+
+
+def _forwarded_from(
+    msg: Message,
+    peer_map: Optional[dict[int, str]],
+) -> Optional[str]:
+    info = msg.forward_info
+    if info is None:
+        return None
+
+    author = _resolve_peer_name(info.author_id, peer_map)
+    source = _resolve_peer_name(info.source_id, peer_map)
+    origin = author or info.author_signature or source
+    if origin is None:
+        origin_id = info.author_id or info.source_id
+        origin = f"peer {origin_id}" if origin_id is not None else "Unknown"
+
+    details = [f"Forwarded from {origin}"]
+    if source and source != origin:
+        details.append(f"source: {source}")
+    if info.date:
+        details.append(info.date.strftime("%Y-%m-%d %H:%M:%S"))
+    if info.psa_type:
+        details.append(f"PSA: {info.psa_type}")
+    if info.is_imported:
+        details.append("imported")
+    return " | ".join(details)
+
+
+def _attachment_label(attachment: Attachment) -> str:
+    return attachment.filename or attachment.kind.replace("_", " ").title()
+
+
+def _attachment_description(attachment: Attachment) -> str:
+    details = [attachment.kind]
+    if attachment.filename:
+        details.append(attachment.filename)
+    if attachment.mime_type:
+        details.append(attachment.mime_type)
+    if attachment.cache_key and not attachment.exported_path:
+        details.append(f"cache: {attachment.cache_key}")
+    return " | ".join(details)
+
+
+def _render_markdown_attachment(attachment: Attachment) -> str:
+    label = _attachment_label(attachment)
+    if attachment.url:
+        return f"[{label}]({attachment.url})"
+    if attachment.exported_path:
+        if attachment.kind == "image":
+            return f"![{label}]({attachment.exported_path})"
+        return f"[{label}]({attachment.exported_path})"
+    return f"`[{_attachment_description(attachment)}]`"
 
 
 def build_html_stats(messages: list[Message], title: str, me_name: str) -> HtmlStats:
@@ -292,7 +435,7 @@ def build_html_stats(messages: list[Message], title: str, me_name: str) -> HtmlS
     )
 
 
-def render_markdown(
+def render_markdown(  # pylint: disable=too-many-locals
     messages: list[Message],
     title: str,
     out_path: Path,
@@ -338,7 +481,13 @@ def render_markdown(
                 direction = f" ({msg.speaker_hint()})"
 
             handle.write(f"**{time_str} — {speaker}{direction}**\n\n")
-            handle.write(f"{linkify_markdown(msg.text)}\n\n")
+            forwarded_from = _forwarded_from(msg, peer_map)
+            if forwarded_from:
+                handle.write(f"*{forwarded_from}*\n\n")
+            if msg.text:
+                handle.write(f"{linkify_markdown(msg.text)}\n\n")
+            for attachment in msg.attachments:
+                handle.write(f"{_render_markdown_attachment(attachment)}\n\n")
 
 
 def render_csv(
@@ -361,6 +510,8 @@ def render_csv(
                 "text",
                 "peer_id",
                 "author_id",
+                "attachments",
+                "forward_info",
             ]
         )
         for msg in messages:
@@ -379,8 +530,52 @@ def render_csv(
                     msg.text,
                     msg.peer_id or "",
                     msg.author_id or "",
+                    _attachments_json(msg),
+                    _forward_info_json(msg, peer_map),
                 ]
             )
+
+
+def _attachments_json(msg: Message) -> str:
+    return json.dumps(
+        [
+            {
+                "kind": attachment.kind,
+                "filename": attachment.filename,
+                "mime_type": attachment.mime_type,
+                "path": attachment.exported_path,
+                "cache_key": attachment.cache_key,
+                "alternate_cache_keys": attachment.alternate_cache_keys,
+                "source_path": attachment.source_path,
+                "url": attachment.url,
+            }
+            for attachment in msg.attachments
+        ],
+        ensure_ascii=False,
+    )
+
+
+def _forward_info_json(msg: Message, peer_map: Optional[dict[int, str]] = None) -> str:
+    if msg.forward_info is None:
+        return ""
+    return json.dumps(
+        {
+            "author_id": msg.forward_info.author_id,
+            "author": _resolve_peer_name(msg.forward_info.author_id, peer_map),
+            "source_id": msg.forward_info.source_id,
+            "source": _resolve_peer_name(msg.forward_info.source_id, peer_map),
+            "source_message_peer_id": msg.forward_info.source_message_peer_id,
+            "source_message_namespace": msg.forward_info.source_message_namespace,
+            "source_message_id": msg.forward_info.source_message_id,
+            "date": (
+                msg.forward_info.date.isoformat() if msg.forward_info.date else None
+            ),
+            "author_signature": msg.forward_info.author_signature,
+            "psa_type": msg.forward_info.psa_type,
+            "is_imported": msg.forward_info.is_imported,
+        },
+        ensure_ascii=False,
+    )
 
 
 def render_html(
@@ -489,12 +684,58 @@ def _render_messages(
         handle.write(f'<div class="msg {direction}">')
         handle.write('<div class="bubble">')
         handle.write(f'<div class="meta">[{time_str}] {html.escape(speaker)}</div>')
-        handle.write(linkify_html(msg.text))
+        forwarded_from = _forwarded_from(msg, peer_map)
+        if forwarded_from:
+            handle.write(
+                f'<div class="meta forwarded">{html.escape(forwarded_from)}</div>'
+            )
+        if msg.text:
+            handle.write(linkify_html(msg.text))
+        for attachment in msg.attachments:
+            _render_html_attachment(handle, attachment)
         handle.write("</div></div>")
     handle.write("</div>")
 
     handle.write('<button id="back-top" class="back-top">Back to top</button>')
     handle.write(_back_to_top_script())
+
+
+def _render_html_attachment(handle, attachment: Attachment) -> None:
+    label = html.escape(_attachment_label(attachment))
+    if attachment.url:
+        url = html.escape(attachment.url, quote=True)
+        handle.write(f'<div><a href="{url}">{label}</a></div>')
+        return
+    if attachment.exported_path:
+        path = html.escape(attachment.exported_path, quote=True)
+        mime_type = html.escape(attachment.mime_type or "", quote=True)
+        if attachment.kind == "image" or (
+            attachment.kind == "sticker"
+            and attachment.mime_type in {"image/png", "image/webp"}
+        ):
+            handle.write(
+                f'<div><img src="{path}" alt="{label}" loading="lazy" '
+                'decoding="async"></div>'
+            )
+        elif attachment.kind == "video" or (
+            attachment.kind == "sticker"
+            and attachment.mime_type in {"video/mp4", "video/webm"}
+        ):
+            handle.write(
+                f'<div><video controls preload="none"><source src="{path}" '
+                f'type="{mime_type}"></video></div>'
+            )
+        elif attachment.kind in {"voice", "audio"}:
+            handle.write(
+                f'<div><audio controls preload="none"><source src="{path}" '
+                f'type="{mime_type}"></audio></div>'
+            )
+        else:
+            handle.write(f'<div><a download href="{path}">{label}</a></div>')
+        return
+    handle.write(
+        f'<div class="meta">{html.escape(_attachment_description(attachment))}</div>'
+    )
 
 
 def _message_date_parts(msg: Message) -> tuple[str, str, str]:
