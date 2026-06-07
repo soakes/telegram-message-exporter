@@ -138,10 +138,13 @@ def _valid_local_key(candidate: bytes) -> bool:
 def _decrypt_key_cbc(encrypted: bytes, passcode: bytes) -> Optional[bytes]:
     if len(encrypted) < 32:
         return None
+    payload = encrypted[16:]
+    if len(payload) % 16 != 0:
+        return None
     key = hashlib.sha512(passcode).digest()[:32]
     iv = encrypted[:16]
     cipher = AES.new(key, AES.MODE_CBC, iv)
-    decrypted = cipher.decrypt(encrypted[16:])
+    decrypted = cipher.decrypt(payload)
 
     padding_length = decrypted[-1]
     if padding_length <= 0 or padding_length > 16:
@@ -251,6 +254,14 @@ def derive_key_candidates(
     encrypted = key_path.read_bytes()
     candidates: list[KeyCandidate] = []
     tempkey_ok = False
+
+    # Telegram for macOS/App Store can have a raw .tempkey file that is exactly
+    # 48 bytes: 32-byte db_key + 16-byte db_salt. The original exporter only
+    # knew how to derive this material from .tempkeyEncrypted, so try the raw
+    # 48-byte file directly when it is supplied with --key .tempkey.
+    if len(encrypted) == 48:
+        tempkey_ok = True
+        candidates.append(KeyCandidate("raw-48-tempkey", encrypted.hex()))
 
     for passcode in passcodes:
         parsed = _parse_tempkey(encrypted, passcode)
