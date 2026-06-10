@@ -32,7 +32,7 @@ from .media import copy_message_media
 from .postbox import (
     iter_postbox_messages,
     list_peers_postbox,
-    load_peer_map,
+    load_peer_info,
 )
 from .utils import parse_date_input
 
@@ -133,9 +133,11 @@ def cmd_export(args: argparse.Namespace) -> None:
     )
 
     peer_map: Optional[dict[int, str]] = None
+    peer_info = None
     if is_postbox_kv_table(conn, table):
         peer_rows = conn.execute("SELECT key, value FROM t2").fetchall()
-        peer_map = load_peer_map(peer_rows)
+        peer_info = load_peer_info(peer_rows)
+        peer_map = {peer_id: info.title for peer_id, info in peer_info.items()}
         rows = conn.execute(f"SELECT key, value FROM {table} ORDER BY key").fetchall()
         messages = iter_postbox_messages(
             rows,
@@ -182,7 +184,15 @@ def cmd_export(args: argparse.Namespace) -> None:
     elif args.format == "csv":
         render_csv(messages, out_path, peer_map=peer_map, me_name=args.me_name)
     elif args.format == "html":
-        render_html(messages, title, out_path, peer_map=peer_map, me_name=args.me_name)
+        render_html(
+            messages,
+            title,
+            out_path,
+            peer_map=peer_map,
+            peer_info=peer_info,
+            me_name=args.me_name,
+            split=args.split_html,
+        )
     else:
         raise SystemExit(f"Unknown format: {args.format}")
 
@@ -295,6 +305,11 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument(
         "--media-dir",
         help="Directory for copied media (defaults to <export-name>_media)",
+    )
+    export.add_argument(
+        "--split-html",
+        action="store_true",
+        help="Write one HTML index plus separate per-chat HTML files",
     )
     export.add_argument(
         "--show-direction", action="store_true", help="Append (in)/(out) labels"

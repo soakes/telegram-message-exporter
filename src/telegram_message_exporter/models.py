@@ -23,6 +23,15 @@ class Attachment:
 
 
 @dataclass(frozen=True)
+class PeerInfo:
+    """Display metadata for a Telegram peer."""
+
+    peer_id: int
+    title: str
+    kind: str = "unknown"
+
+
+@dataclass(frozen=True)
 class Message:
     """Normalized message representation used by exporters."""
 

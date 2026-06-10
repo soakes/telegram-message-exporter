@@ -98,6 +98,9 @@ messages back into Telegram, or upload recovered data anywhere.
   date, and end date
 - **Readable output**: writes styled HTML, Markdown, or CSV with timestamps,
   speakers, directions, and link handling
+- **Telegram-like HTML viewer**: separates all chats, filters private chats,
+  groups, channels, bots, and unknown peers, and includes global/per-chat search
+  plus media/files tabs
 - **Local media export**: records decoded media/file references and copies
   locally available cached files when you provide a media/cache root
 - **Diagnostics**: samples tables and rows when Telegram storage changes or a
@@ -292,11 +295,14 @@ telegram-exporter export \
 telegram-exporter export \
   --db recovery/plaintext.db \
   --format html \
-  --out recovery/all-chats.html
+  --out recovery/all-chats.html \
+  --split-html
 ```
 
 HTML exports group all decoded chats in a Telegram-like sidebar when no
-`--peer-id` or `--contact` filter is provided.
+`--peer-id` or `--contact` filter is provided. `--split-html` writes one index
+file plus one HTML file per chat, which keeps large all-chat exports much more
+responsive while still opening from `all-chats.html`.
 
 ### Export locally cached media/files
 
@@ -390,6 +396,7 @@ telegram-exporter decrypt \
 | `--copy-media` | no | Copy locally available media/files referenced by decoded messages |
 | `--media-root` | no | Directory to search for Telegram media/cache files; also enables media copy |
 | `--media-dir` | no | Directory for copied media; defaults to `<export-name>_media` |
+| `--split-html` | no | For HTML, write an index plus separate per-chat pages |
 | `--show-direction` | no | Append `(in)` or `(out)` labels in Markdown |
 
 ---
@@ -400,7 +407,7 @@ telegram-exporter decrypt \
 
 | Format | Best for | Notes |
 | --- | --- | --- |
-| `html` | Reading and sharing a polished transcript | Telegram-like chat layout, all-chats sidebar, media previews, back-to-top, and link handling |
+| `html` | Reading and sharing a polished transcript | Telegram-like chat layout, chat-type filters, global and per-chat search, media/files tabs, optional split pages, and link handling |
 | `md` | Archival text, notes, version control | Compact, portable, easy to diff, and includes attachment references |
 | `csv` | Analysis in spreadsheets or scripts | Includes date, time, Unix timestamp, direction, speaker, text, attachments, peer ID, and author ID |
 
@@ -502,7 +509,8 @@ telegram-exporter decrypt \
 - Does not download content from Telegram servers.
 - Media/file export is best-effort and only copies files already present on the
   Mac. If Telegram did not cache a file locally, the transcript keeps the
-  decoded reference but cannot recreate the missing content.
+  decoded reference but cannot recreate the missing content. Encrypted or
+  proprietary media resource cache files may still need a dedicated decoder.
 - Some newer or uncommon Telegram message payloads may only partially decode.
 - Does not support Telegram Desktop/Qt, the Mac App Store version, mobile
   backups, or Telegram cloud export archives.
@@ -540,6 +548,9 @@ storage setup, so it is outside the supported recovery path.
 Yes, when the content is still available locally. Pass `--media-root` pointing
 at the Telegram data/cache tree, and the exporter will copy matched files next
 to the transcript. It does not download missing media from Telegram servers.
+If the cache entry is still encrypted or stored in a Telegram-specific resource
+format, the exporter keeps the reference in the transcript but may not be able
+to turn it into a normal photo/video/document yet.
 
 ---
 

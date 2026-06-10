@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Iterable, Optional
 
 from .hashing import murmur_hash
-from .models import Attachment, Message
+from .models import Attachment, Message, PeerInfo
 
 
 class ByteReader:
@@ -298,6 +298,15 @@ RESOURCE_KEYS = {
     "dcid",
     "dc",
 }
+
+PEER_KIND_BY_TYPE_HASH = {
+    murmur_hash(b"TelegramUser"): "private",
+    murmur_hash(b"TelegramGroup"): "group",
+    murmur_hash(b"TelegramChannel"): "channel",
+}
+BOT_KEYS = {"bot", "isbot", "is_bot", "botinfo", "bot_info", "bi"}
+BROADCAST_KEYS = {"broadcast", "isbroadcast", "is_broadcast"}
+MEGAGROUP_KEYS = {"megagroup", "ismegagroup", "is_megagroup"}
 
 
 def _safe_decode_object(payload: bytes) -> Optional[Any]:
@@ -712,6 +721,57 @@ def peer_display(peer: Any) -> Optional[str]:
     return None
 
 
+def _flat_peer_keys(peer: Any) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(peer, dict):
+        for key, value in peer.items():
+            keys.add(str(key).replace("-", "_").lower())
+            keys.update(_flat_peer_keys(value))
+    elif isinstance(peer, (list, tuple)):
+        for item in peer:
+            keys.update(_flat_peer_keys(item))
+    return keys
+
+
+def _flat_truthy_peer_keys(peer: Any) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(peer, dict):
+        for key, value in peer.items():
+            normalized = str(key).replace("-", "_").lower()
+            if value not in (None, False, 0, "", [], {}):
+                keys.add(normalized)
+            keys.update(_flat_truthy_peer_keys(value))
+    elif isinstance(peer, (list, tuple)):
+        for item in peer:
+            keys.update(_flat_truthy_peer_keys(item))
+    return keys
+
+
+def peer_kind(peer: Any) -> str:
+    """Best-effort classification for a decoded Telegram peer."""
+    if not isinstance(peer, dict):
+        return "unknown"
+
+    raw_type = peer.get("@type")
+    kind = PEER_KIND_BY_TYPE_HASH.get(raw_type, "unknown")
+    keys = _flat_peer_keys(peer)
+    truthy_keys = _flat_truthy_peer_keys(peer)
+
+    if truthy_keys & BOT_KEYS:
+        return "bot"
+    if kind == "channel" and truthy_keys & MEGAGROUP_KEYS:
+        return "group"
+    if kind == "channel" and truthy_keys & BROADCAST_KEYS:
+        return "channel"
+    if kind != "unknown":
+        return kind
+    if "fn" in peer or "ln" in peer:
+        return "private"
+    if "t" in peer:
+        return "channel" if "un" in peer else "group"
+    return "unknown"
+
+
 def list_peers_postbox(
     rows: Iterable[tuple[bytes, bytes]],
     term: Optional[str],
@@ -731,13 +791,18 @@ def list_peers_postbox(
             continue
         if term and term.lower() not in display.lower():
             continue
-        results.append(("t2", peer_id, display))
+        results.append(("t2", peer_id, f"{display} [{peer_kind(data)}]"))
     return results
 
 
 def load_peer_map(rows: Iterable[tuple[bytes, bytes]]) -> dict[int, str]:
     """Load peer mapping from Postbox t2 rows."""
-    peer_map: dict[int, str] = {}
+    return {info.peer_id: info.title for info in load_peer_info(rows).values()}
+
+
+def load_peer_info(rows: Iterable[tuple[bytes, bytes]]) -> dict[int, PeerInfo]:
+    """Load peer display metadata from Postbox t2 rows."""
+    peer_info: dict[int, PeerInfo] = {}
     for key, value in rows:
         peer_id = parse_peer_key(key)
         if peer_id is None or not isinstance(value, (bytes, bytearray)):
@@ -748,5 +813,9 @@ def load_peer_map(rows: Iterable[tuple[bytes, bytes]]) -> dict[int, str]:
             continue
         display = peer_display(data)
         if display:
-            peer_map[peer_id] = display
-    return peer_map
+            peer_info[peer_id] = PeerInfo(
+                peer_id=peer_id,
+                title=display,
+                kind=peer_kind(data),
+            )
+    return peer_info
