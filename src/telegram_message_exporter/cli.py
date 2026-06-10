@@ -28,6 +28,7 @@ from .exporters import (
     render_html,
     render_markdown,
 )
+from .media import copy_message_media
 from .postbox import (
     iter_postbox_messages,
     list_peers_postbox,
@@ -151,7 +152,21 @@ def cmd_export(args: argparse.Namespace) -> None:
         raise SystemExit("No messages found with the current filters.")
 
     title = args.contact or _title_from_peer(peer_map, peer_id)
-    out_path = Path(args.out) if args.out else _default_out_path(args.format)
+    out_path = (
+        Path(args.out).expanduser() if args.out else _default_out_path(args.format)
+    )
+
+    if args.copy_media or args.media_root:
+        media_root = Path(args.media_root).expanduser() if args.media_root else None
+        media_dir = Path(args.media_dir).expanduser() if args.media_dir else None
+        messages, media_report = copy_message_media(
+            messages,
+            out_path,
+            media_root=media_root,
+            media_dir=media_dir,
+        )
+    else:
+        media_report = None
 
     if args.format == "md":
         render_markdown(
@@ -172,6 +187,13 @@ def cmd_export(args: argparse.Namespace) -> None:
         raise SystemExit(f"Unknown format: {args.format}")
 
     print(f"Exported {len(messages)} messages to {out_path}")
+    if media_report:
+        print(
+            "Media export: "
+            f"{media_report.copied} copied, {media_report.missing} unresolved"
+        )
+        if media_report.media_dir:
+            print(f"Media directory: {media_report.media_dir}")
 
 
 def _title_from_peer(peer_map: Optional[dict[int, str]], peer_id: Optional[int]) -> str:
@@ -258,6 +280,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export.add_argument("--out", help="Output file path (defaults by format)")
     export.add_argument("--me-name", default="Me", help="Label for outgoing messages")
+    export.add_argument(
+        "--copy-media",
+        action="store_true",
+        help="Copy locally available media/files referenced by decoded messages",
+    )
+    export.add_argument(
+        "--media-root",
+        help=(
+            "Directory to search for Telegram media/cache files. "
+            "Also enables media copy."
+        ),
+    )
+    export.add_argument(
+        "--media-dir",
+        help="Directory for copied media (defaults to <export-name>_media)",
+    )
     export.add_argument(
         "--show-direction", action="store_true", help="Append (in)/(out) labels"
     )

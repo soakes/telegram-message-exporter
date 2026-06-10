@@ -98,6 +98,8 @@ messages back into Telegram, or upload recovered data anywhere.
   date, and end date
 - **Readable output**: writes styled HTML, Markdown, or CSV with timestamps,
   speakers, directions, and link handling
+- **Local media export**: records decoded media/file references and copies
+  locally available cached files when you provide a media/cache root
 - **Diagnostics**: samples tables and rows when Telegram storage changes or a
   cache does not match the expected shape
 
@@ -289,9 +291,28 @@ telegram-exporter export \
 ```bash
 telegram-exporter export \
   --db recovery/plaintext.db \
-  --format csv \
-  --out recovery/all-chats.csv
+  --format html \
+  --out recovery/all-chats.html
 ```
+
+HTML exports group all decoded chats in a Telegram-like sidebar when no
+`--peer-id` or `--contact` filter is provided.
+
+### Export locally cached media/files
+
+```bash
+telegram-exporter export \
+  --db recovery/plaintext.db \
+  --peer-id 123456789 \
+  --format html \
+  --out recovery/chat.html \
+  --media-root "$HOME/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable"
+```
+
+`--media-root` searches the local Telegram data/cache tree and copies matching
+files into `recovery/chat_media/` by default. Use `--media-dir` to choose a
+different folder, or `--copy-media` when decoded messages already contain
+absolute local paths.
 
 ### Inspect an unfamiliar database
 
@@ -366,6 +387,9 @@ telegram-exporter decrypt \
 | `--format` | no | `html`, `md`, or `csv`; default `md` |
 | `--out` | no | Output path; defaults to `chat_export.<format>` |
 | `--me-name` | no | Display label for outgoing messages; default `Me` |
+| `--copy-media` | no | Copy locally available media/files referenced by decoded messages |
+| `--media-root` | no | Directory to search for Telegram media/cache files; also enables media copy |
+| `--media-dir` | no | Directory for copied media; defaults to `<export-name>_media` |
 | `--show-direction` | no | Append `(in)` or `(out)` labels in Markdown |
 
 ---
@@ -376,9 +400,9 @@ telegram-exporter decrypt \
 
 | Format | Best for | Notes |
 | --- | --- | --- |
-| `html` | Reading and sharing a polished transcript | Includes summary cards, date jump, back-to-top, and link handling |
-| `md` | Archival text, notes, version control | Compact, portable, and easy to diff |
-| `csv` | Analysis in spreadsheets or scripts | Includes date, time, Unix timestamp, direction, speaker, text, peer ID, and author ID |
+| `html` | Reading and sharing a polished transcript | Telegram-like chat layout, all-chats sidebar, media previews, back-to-top, and link handling |
+| `md` | Archival text, notes, version control | Compact, portable, easy to diff, and includes attachment references |
+| `csv` | Analysis in spreadsheets or scripts | Includes date, time, Unix timestamp, direction, speaker, text, attachments, peer ID, and author ID |
 
 ### Markdown snippet
 
@@ -401,8 +425,8 @@ telegram-exporter decrypt \
 ### CSV snippet
 
 ```csv
-date,time,timestamp,direction,speaker,text,peer_id,author_id
-2026-02-04,14:13:09,1770214389,out,Me,"3h48 is good also",123456789,123456789
+date,time,timestamp,direction,speaker,text,attachments,attachment_paths,peer_id,author_id
+2026-02-04,14:13:09,1770214389,out,Me,"3h48 is good also","",,123456789,123456789
 ```
 
 ---
@@ -476,7 +500,9 @@ telegram-exporter decrypt \
 - Does not bypass a Telegram local passcode; you need the passcode.
 - Does not recover messages that no longer exist in the local cache.
 - Does not download content from Telegram servers.
-- Does not currently extract media files from Telegram's file cache.
+- Media/file export is best-effort and only copies files already present on the
+  Mac. If Telegram did not cache a file locally, the transcript keeps the
+  decoded reference but cannot recreate the missing content.
 - Some newer or uncommon Telegram message payloads may only partially decode.
 - Does not support Telegram Desktop/Qt, the Mac App Store version, mobile
   backups, or Telegram cloud export archives.
@@ -511,8 +537,9 @@ storage setup, so it is outside the supported recovery path.
 
 ### Can it recover photos, videos, or documents?
 
-Not currently. The exporter focuses on decoded message text and transcript
-metadata.
+Yes, when the content is still available locally. Pass `--media-root` pointing
+at the Telegram data/cache tree, and the exporter will copy matched files next
+to the transcript. It does not download missing media from Telegram servers.
 
 ---
 

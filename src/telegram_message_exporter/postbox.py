@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Iterable, Optional
 
 from .hashing import murmur_hash
-from .models import Message
+from .models import Attachment, Message
 
 
 class ByteReader:
@@ -281,6 +281,272 @@ class TelegramMediaAction:
         return {"type": self.type.name, "payload": self.payload}
 
 
+FILENAME_KEYS = {"filename", "file_name", "name", "fn", "n"}
+MIME_KEYS = {"mimetype", "mime_type", "mime", "m"}
+PATH_KEYS = {"path", "filepath", "file_path", "localpath", "local_path", "p"}
+SIZE_KEYS = {"size", "filesize", "file_size", "s"}
+RESOURCE_KEYS = {
+    "id",
+    "fileid",
+    "file_id",
+    "localid",
+    "local_id",
+    "volumeid",
+    "volume_id",
+    "datacenterid",
+    "datacenter_id",
+    "dcid",
+    "dc",
+}
+
+
+def _safe_decode_object(payload: bytes) -> Optional[Any]:
+    """Best-effort decode for embedded media and message attributes."""
+    try:
+        return PostboxDecoder(payload).decode_root_object()
+    except (
+        EOFError,
+        UnicodeDecodeError,
+        ValueError,
+        TypeError,
+        struct.error,
+    ):
+        return None
+
+
+def _looks_like_mime_type(value: str) -> bool:
+    if value.count("/") != 1 or any(ch.isspace() for ch in value):
+        return False
+    left, right = value.split("/", 1)
+    return bool(left and right and left.replace("-", "").isalpha())
+
+
+def _looks_like_path(value: str) -> bool:
+    if "\n" in value:
+        return False
+    return value.startswith(("/", "~/")) or "/" in value or "\\" in value
+
+
+def _looks_like_file_name(value: str) -> bool:
+    if not value or len(value) > 160 or _looks_like_path(value):
+        return False
+    if any(ch in value for ch in "\n\r\t"):
+        return False
+    stem, dot, ext = value.rpartition(".")
+    return bool(stem and dot and 1 <= len(ext) <= 12 and ext.replace("-", "").isalnum())
+
+
+def _merge_metadata(target: dict[str, Any], source: dict[str, Any]) -> None:
+    """Merge media metadata, preserving the more specific existing values."""
+    for key in ("file_name", "mime_type", "size", "source_path"):
+        if target.get(key) is None and source.get(key) is not None:
+            target[key] = source[key]
+    target.setdefault("resource_keys", set()).update(source.get("resource_keys", set()))
+
+
+def _collect_media_metadata(
+    value: Any, key: Optional[str] = None, metadata: Optional[dict[str, Any]] = None
+) -> dict[str, Any]:
+    """Collect useful media metadata from loosely decoded Postbox objects."""
+    metadata = metadata or {
+        "file_name": None,
+        "mime_type": None,
+        "size": None,
+        "source_path": None,
+        "resource_keys": set(),
+    }
+    key_lower = (key or "").replace("-", "_").lower()
+
+    if isinstance(value, dict):
+        for child_key, child_value in value.items():
+            if child_key == "@type":
+                metadata["resource_keys"].add(str(child_value))
+                continue
+            _collect_media_metadata(child_value, str(child_key), metadata)
+        return metadata
+
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _collect_media_metadata(item, key, metadata)
+        return metadata
+
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return metadata
+        if metadata["mime_type"] is None and (
+            key_lower in MIME_KEYS or _looks_like_mime_type(cleaned)
+        ):
+            metadata["mime_type"] = cleaned
+        if metadata["source_path"] is None and (
+            key_lower in PATH_KEYS or _looks_like_path(cleaned)
+        ):
+            metadata["source_path"] = cleaned
+        if metadata["file_name"] is None and (
+            key_lower in FILENAME_KEYS or _looks_like_file_name(cleaned)
+        ):
+            metadata["file_name"] = cleaned.split("/")[-1].split("\\")[-1]
+        if len(cleaned) <= 160 and not any(ch.isspace() for ch in cleaned):
+            metadata["resource_keys"].add(cleaned)
+        return metadata
+
+    if isinstance(value, int):
+        if metadata["size"] is None and key_lower in SIZE_KEYS and value > 0:
+            metadata["size"] = value
+        if key_lower in RESOURCE_KEYS and value:
+            metadata["resource_keys"].add(str(value))
+    return metadata
+
+
+def _metadata_from_blobs(blobs: Iterable[bytes]) -> dict[str, Any]:
+    metadata = {
+        "file_name": None,
+        "mime_type": None,
+        "size": None,
+        "source_path": None,
+        "resource_keys": set(),
+    }
+    for blob in blobs:
+        decoded = _safe_decode_object(blob)
+        if decoded is None:
+            continue
+        _merge_metadata(metadata, _collect_media_metadata(decoded))
+    return metadata
+
+
+def _has_media_tag(tags: MessageTags) -> bool:
+    media_tags = (
+        MessageTags.PHOTO_OR_VIDEO
+        | MessageTags.FILE
+        | MessageTags.MUSIC
+        | MessageTags.VOICE_OR_INSTANT_VIDEO
+        | MessageTags.GIF
+        | MessageTags.PHOTO
+        | MessageTags.VIDEO
+    )
+    return bool(tags & media_tags)
+
+
+def _kind_from_tags(tags: MessageTags, mime_type: Optional[str]) -> str:
+    if mime_type:
+        if mime_type.startswith("image/"):
+            return "photo"
+        if mime_type.startswith("video/"):
+            return "video"
+        if mime_type.startswith("audio/"):
+            return "audio"
+    if MessageTags.GIF in tags:
+        return "gif"
+    if MessageTags.VOICE_OR_INSTANT_VIDEO in tags:
+        return "voice"
+    if MessageTags.MUSIC in tags:
+        return "audio"
+    if MessageTags.VIDEO in tags:
+        return "video"
+    if MessageTags.PHOTO in tags or MessageTags.PHOTO_OR_VIDEO in tags:
+        return "photo"
+    if MessageTags.FILE in tags:
+        return "file"
+    return "media"
+
+
+def _attachment_title(kind: str, metadata: dict[str, Any]) -> str:
+    if metadata.get("file_name"):
+        return str(metadata["file_name"])
+    titles = {
+        "photo": "Photo",
+        "video": "Video",
+        "audio": "Audio",
+        "voice": "Voice message",
+        "gif": "GIF",
+        "file": "File",
+    }
+    return titles.get(kind, "Media")
+
+
+def _attachment_from_metadata(
+    kind: str, metadata: dict[str, Any], reference: Optional[str] = None
+) -> Attachment:
+    resource_keys = tuple(sorted(str(item) for item in metadata["resource_keys"]))[:24]
+    return Attachment(
+        kind=kind,
+        title=_attachment_title(kind, metadata),
+        file_name=metadata.get("file_name"),
+        mime_type=metadata.get("mime_type"),
+        size=metadata.get("size"),
+        source_path=metadata.get("source_path"),
+        reference=reference,
+        resource_keys=resource_keys,
+    )
+
+
+def _dedupe_attachments(attachments: Iterable[Attachment]) -> tuple[Attachment, ...]:
+    seen: set[tuple[Any, ...]] = set()
+    result: list[Attachment] = []
+    for item in attachments:
+        key = (
+            item.kind,
+            item.title,
+            item.file_name,
+            item.mime_type,
+            item.size,
+            item.source_path,
+            item.reference,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return tuple(result)
+
+
+def _format_media_reference(namespace: int, message_id: int) -> str:
+    return f"postbox:{namespace}:{message_id}"
+
+
+def build_message_attachments(
+    tags: MessageTags,
+    attributes: Iterable[bytes],
+    embedded_media: Iterable[bytes],
+    referenced_media_ids: Iterable[tuple[int, int]],
+) -> tuple[Attachment, ...]:
+    """Build normalized attachments from Postbox message media payloads."""
+    attribute_metadata = _metadata_from_blobs(attributes)
+    attachments: list[Attachment] = []
+    references = [_format_media_reference(*item) for item in referenced_media_ids]
+
+    for media_blob in embedded_media:
+        decoded = _safe_decode_object(media_blob)
+        metadata = {
+            "file_name": None,
+            "mime_type": None,
+            "size": None,
+            "source_path": None,
+            "resource_keys": set(),
+        }
+        if decoded is not None:
+            _merge_metadata(metadata, _collect_media_metadata(decoded))
+        _merge_metadata(metadata, attribute_metadata)
+        kind = _kind_from_tags(tags, metadata.get("mime_type"))
+        reference = references[0] if len(references) == 1 else None
+        attachments.append(_attachment_from_metadata(kind, metadata, reference))
+
+    if not attachments and (_has_media_tag(tags) or references):
+        kind = _kind_from_tags(tags, attribute_metadata.get("mime_type"))
+        reference = references[0] if len(references) == 1 else None
+        attachments.append(
+            _attachment_from_metadata(kind, attribute_metadata, reference)
+        )
+
+    if references and len(references) != 1:
+        for reference in references:
+            attachments.append(
+                Attachment(kind="media", title="Media", reference=reference)
+            )
+
+    return _dedupe_attachments(attachments)
+
+
 def read_intermediate_fwd_info(reader: ByteReader) -> Optional[dict[str, Any]]:
     """Decode forward info section from a message payload."""
     info_flags = FwdInfoFlags(reader.read_int8())
@@ -353,12 +619,10 @@ def read_intermediate_message(payload: bytes) -> Optional[dict[str, Any]]:
     text = reader.read_str()
 
     attributes_count = reader.read_int32()
-    for _ in range(attributes_count):
-        _ = reader.read_bytes()
+    attributes = [reader.read_bytes() for _ in range(attributes_count)]
 
     embedded_media_count = reader.read_int32()
-    for _ in range(embedded_media_count):
-        _ = reader.read_bytes()
+    embedded_media = [reader.read_bytes() for _ in range(embedded_media_count)]
 
     referenced_media_ids = []
     for _ in range(reader.read_int32()):
@@ -373,6 +637,9 @@ def read_intermediate_message(payload: bytes) -> Optional[dict[str, Any]]:
         "fwd": fwd_info,
         "text": text,
         "referenced_media_ids": referenced_media_ids,
+        "attachments": build_message_attachments(
+            tags, attributes, embedded_media, referenced_media_ids
+        ),
     }
 
 
@@ -402,7 +669,8 @@ def iter_postbox_messages(
         if not msg:
             continue
         text = msg.get("text") or ""
-        if not text:
+        attachments = msg.get("attachments") or ()
+        if not text and not attachments:
             continue
 
         incoming = MessageFlags.INCOMING in msg["flags"]
@@ -414,6 +682,7 @@ def iter_postbox_messages(
                 outgoing=None if incoming is None else not incoming,
                 peer_id=idx.peer_id,
                 author_id=msg.get("author_id"),
+                attachments=tuple(attachments),
             )
         )
         if limit and len(messages) >= limit:
