@@ -1,5 +1,7 @@
 .venv/
 venv/
+env/
+ENV/
 __pycache__/
 .ruff_cache/
 *.pyc
@@ -8,6 +10,7 @@ __pycache__/
 *.sqlite3
 dist/
 build/
+recovery/
 *.egg-info/
 db_sqlite*
 chat_*.md

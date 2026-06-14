@@ -1,4 +1,4 @@
-"""Cryptographic helpers for Telegram Desktop database decryption."""
+"""Cryptographic helpers for native Telegram for macOS database decryption."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def _tempkey_kdf(passcode: bytes) -> tuple[bytes, bytes]:
 
 
 def _parse_tempkey(encrypted: bytes, passcode: bytes) -> Optional[bytes]:
-    """Parse Telegram Desktop .tempkeyEncrypted -> dbKey + dbSalt."""
+    """Parse native macOS Telegram .tempkeyEncrypted -> dbKey + dbSalt."""
     if len(encrypted) % 16 != 0:
         return None
 

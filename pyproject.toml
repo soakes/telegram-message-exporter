@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "telegram-message-exporter"
 dynamic = ["version"]
-description = "Offline recovery and export tool for Telegram Desktop (macOS)."
+description = "Offline recovery and export tool for native Telegram for macOS."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

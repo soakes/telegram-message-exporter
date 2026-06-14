@@ -1,4 +1,4 @@
-"""Postbox parsing helpers for Telegram Desktop databases."""
+"""Postbox parsing helpers for native Telegram for macOS databases."""
 
 from __future__ import annotations
 
@@ -284,7 +284,7 @@ class TelegramMediaAction:
 FILENAME_KEYS = {"filename", "file_name", "name", "fn", "n"}
 MIME_KEYS = {"mimetype", "mime_type", "mime", "m"}
 PATH_KEYS = {"path", "filepath", "file_path", "localpath", "local_path", "p"}
-SIZE_KEYS = {"size", "filesize", "file_size", "s"}
+SIZE_KEYS = {"size", "filesize", "file_size", "s", "s64", "n64"}
 RESOURCE_KEYS = {
     "id",
     "fileid",
@@ -307,10 +307,26 @@ PEER_KIND_BY_TYPE_HASH = {
 BOT_KEYS = {"bot", "isbot", "is_bot", "botinfo", "bot_info", "bi"}
 BROADCAST_KEYS = {"broadcast", "isbroadcast", "is_broadcast"}
 MEGAGROUP_KEYS = {"megagroup", "ismegagroup", "is_megagroup"}
+WEBPAGE_TYPE_HASH = -661322156
+ACTION_TYPE_HASH = -1132984447
+POLL_TYPE_HASH = -165764138
+CONTACT_TYPE_HASH = 49483725
+DICE_TYPE_HASH = 62379663
 
 
 def _safe_decode_object(payload: bytes) -> Optional[Any]:
     """Best-effort decode for embedded media and message attributes."""
+    offsets = (0, 5, 4, 1, 2, 3, 6, 7, 8)
+    for offset in offsets:
+        if offset >= len(payload):
+            continue
+        decoded = _try_decode_object(payload[offset:])
+        if decoded is not None:
+            return decoded
+    return None
+
+
+def _try_decode_object(payload: bytes) -> Optional[Any]:
     try:
         return PostboxDecoder(payload).decode_root_object()
     except (
@@ -331,6 +347,8 @@ def _looks_like_mime_type(value: str) -> bool:
 
 
 def _looks_like_path(value: str) -> bool:
+    if _looks_like_mime_type(value):
+        return False
     if "\n" in value:
         return False
     return value.startswith(("/", "~/")) or "/" in value or "\\" in value
@@ -347,10 +365,189 @@ def _looks_like_file_name(value: str) -> bool:
 
 def _merge_metadata(target: dict[str, Any], source: dict[str, Any]) -> None:
     """Merge media metadata, preserving the more specific existing values."""
-    for key in ("file_name", "mime_type", "size", "source_path"):
+    for key in (
+        "file_name",
+        "mime_type",
+        "size",
+        "source_path",
+        "location",
+        "web_url",
+        "web_title",
+        "web_description",
+        "poll_question",
+        "poll_options",
+        "contact_name",
+        "contact_phone",
+        "action_type",
+        "action_title",
+        "dice_value",
+    ):
         if target.get(key) is None and source.get(key) is not None:
             target[key] = source[key]
     target.setdefault("resource_keys", set()).update(source.get("resource_keys", set()))
+
+
+def _int_value(value: Any) -> Optional[int]:
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _float_value(value: Any) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (float, int)):
+        return float(value)
+    return None
+
+
+def _str_value(value: Any) -> Optional[str]:
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _looks_like_url(value: str) -> bool:
+    lower = value.lower()
+    return lower.startswith(("http://", "https://", "tg://", "t.me/"))
+
+
+def _url_value(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if _looks_like_url(cleaned):
+        return cleaned
+    return None
+
+
+def _location_from_dict(value: dict[str, Any]) -> Optional[tuple[float, float]]:
+    latitude = _float_value(value.get("la"))
+    longitude = _float_value(value.get("lo"))
+    if latitude is None or longitude is None:
+        return None
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        return None
+    return latitude, longitude
+
+
+def _location_resource_keys(latitude: float, longitude: float) -> tuple[str, ...]:
+    exact = f"map-{latitude}-{longitude}"
+    rounded = f"map-{latitude:.6f}-{longitude:.6f}"
+    return tuple(dict.fromkeys((exact, rounded)))
+
+
+def _location_reference(latitude: float, longitude: float) -> str:
+    return f"https://maps.apple.com/?ll={latitude:.6f},{longitude:.6f}"
+
+
+def _add_resource_names_from_dict(
+    value: dict[str, Any], metadata: dict[str, Any]
+) -> None:
+    resource_keys = metadata.setdefault("resource_keys", set())
+    _add_webpage_metadata(value, metadata)
+    _add_poll_metadata(value, metadata)
+    _add_contact_metadata(value, metadata)
+    _add_action_metadata(value, metadata)
+    _add_dice_metadata(value, metadata)
+
+    location = _location_from_dict(value)
+    if location:
+        if metadata.get("location") is None:
+            metadata["location"] = location
+        resource_keys.update(_location_resource_keys(*location))
+
+    datacenter_id = _int_value(value.get("d"))
+    document_id = _int_value(value.get("f"))
+    photo_id = _int_value(value.get("i"))
+    size_name = _str_value(value.get("s"))
+    type_hash = _int_value(value.get("@type"))
+
+    if datacenter_id is not None and document_id is not None:
+        resource_keys.add(f"telegram-cloud-document-{datacenter_id}-{document_id}")
+
+    if datacenter_id is None or photo_id is None or size_name is None:
+        return
+
+    if type_hash == -2129249780:
+        resource_keys.add(
+            f"telegram-cloud-document-size-{datacenter_id}-{photo_id}-{size_name}"
+        )
+    elif type_hash == 1226791958:
+        resource_keys.add(
+            f"telegram-cloud-photo-size-{datacenter_id}-{photo_id}-{size_name}"
+        )
+    else:
+        resource_keys.add(
+            f"telegram-cloud-photo-size-{datacenter_id}-{photo_id}-{size_name}"
+        )
+        resource_keys.add(
+            f"telegram-cloud-document-size-{datacenter_id}-{photo_id}-{size_name}"
+        )
+
+
+def _add_webpage_metadata(value: dict[str, Any], metadata: dict[str, Any]) -> None:
+    if _int_value(value.get("@type")) != WEBPAGE_TYPE_HASH:
+        return
+    url = _url_value(value.get("u")) or _url_value(value.get("d"))
+    if url and metadata.get("web_url") is None:
+        metadata["web_url"] = url
+    title = _str_value(value.get("ti")) or _str_value(value.get("ws"))
+    if title and metadata.get("web_title") is None:
+        metadata["web_title"] = title
+    description = _str_value(value.get("tx"))
+    if description and metadata.get("web_description") is None:
+        metadata["web_description"] = description
+
+
+def _add_poll_metadata(value: dict[str, Any], metadata: dict[str, Any]) -> None:
+    if _int_value(value.get("@type")) != POLL_TYPE_HASH:
+        return
+    question = _str_value(value.get("t"))
+    if question and metadata.get("poll_question") is None:
+        metadata["poll_question"] = question
+    options = []
+    for option in value.get("os") or []:
+        if isinstance(option, dict):
+            text = _str_value(option.get("t")) or _str_value(option.get("text"))
+            if text:
+                options.append(text)
+    if options and metadata.get("poll_options") is None:
+        metadata["poll_options"] = tuple(options)
+
+
+def _add_contact_metadata(value: dict[str, Any], metadata: dict[str, Any]) -> None:
+    if _int_value(value.get("@type")) != CONTACT_TYPE_HASH:
+        return
+    name = " ".join(
+        part
+        for part in (_str_value(value.get("n.f")), _str_value(value.get("n.l")))
+        if part
+    ).strip()
+    if name and metadata.get("contact_name") is None:
+        metadata["contact_name"] = name
+    phone = _str_value(value.get("pn"))
+    if phone and metadata.get("contact_phone") is None:
+        metadata["contact_phone"] = phone
+
+
+def _add_action_metadata(value: dict[str, Any], metadata: dict[str, Any]) -> None:
+    if _int_value(value.get("@type")) != ACTION_TYPE_HASH:
+        return
+    raw_value = _int_value(value.get("_rawValue"))
+    if raw_value is not None and metadata.get("action_type") is None:
+        metadata["action_type"] = raw_value
+    title = _str_value(value.get("title")) or _str_value(value.get("text"))
+    if title and metadata.get("action_title") is None:
+        metadata["action_title"] = title
+
+
+def _add_dice_metadata(value: dict[str, Any], metadata: dict[str, Any]) -> None:
+    if _int_value(value.get("@type")) != DICE_TYPE_HASH:
+        return
+    dice_value = _int_value(value.get("d"))
+    if dice_value is not None and metadata.get("dice_value") is None:
+        metadata["dice_value"] = dice_value
 
 
 def _collect_media_metadata(
@@ -362,14 +559,25 @@ def _collect_media_metadata(
         "mime_type": None,
         "size": None,
         "source_path": None,
+        "location": None,
+        "web_url": None,
+        "web_title": None,
+        "web_description": None,
+        "poll_question": None,
+        "poll_options": None,
+        "contact_name": None,
+        "contact_phone": None,
+        "action_type": None,
+        "action_title": None,
+        "dice_value": None,
         "resource_keys": set(),
     }
     key_lower = (key or "").replace("-", "_").lower()
 
     if isinstance(value, dict):
+        _add_resource_names_from_dict(value, metadata)
         for child_key, child_value in value.items():
             if child_key == "@type":
-                metadata["resource_keys"].add(str(child_value))
                 continue
             _collect_media_metadata(child_value, str(child_key), metadata)
         return metadata
@@ -387,15 +595,17 @@ def _collect_media_metadata(
             key_lower in MIME_KEYS or _looks_like_mime_type(cleaned)
         ):
             metadata["mime_type"] = cleaned
-        if metadata["source_path"] is None and (
-            key_lower in PATH_KEYS or _looks_like_path(cleaned)
-        ):
+        if metadata["source_path"] is None and key_lower in PATH_KEYS:
             metadata["source_path"] = cleaned
         if metadata["file_name"] is None and (
             key_lower in FILENAME_KEYS or _looks_like_file_name(cleaned)
         ):
             metadata["file_name"] = cleaned.split("/")[-1].split("\\")[-1]
-        if len(cleaned) <= 160 and not any(ch.isspace() for ch in cleaned):
+        if (
+            len(cleaned) <= 160
+            and not any(ch.isspace() for ch in cleaned)
+            and not _looks_like_url(cleaned)
+        ):
             metadata["resource_keys"].add(cleaned)
         return metadata
 
@@ -413,6 +623,17 @@ def _metadata_from_blobs(blobs: Iterable[bytes]) -> dict[str, Any]:
         "mime_type": None,
         "size": None,
         "source_path": None,
+        "location": None,
+        "web_url": None,
+        "web_title": None,
+        "web_description": None,
+        "poll_question": None,
+        "poll_options": None,
+        "contact_name": None,
+        "contact_phone": None,
+        "action_type": None,
+        "action_title": None,
+        "dice_value": None,
         "resource_keys": set(),
     }
     for blob in blobs:
@@ -437,15 +658,17 @@ def _has_media_tag(tags: MessageTags) -> bool:
 
 
 def _kind_from_tags(tags: MessageTags, mime_type: Optional[str]) -> str:
+    if MessageTags.GIF in tags:
+        return "gif"
     if mime_type:
+        if mime_type in {"application/x-tgsticker", "application/x-tgs"}:
+            return "sticker"
         if mime_type.startswith("image/"):
             return "photo"
         if mime_type.startswith("video/"):
             return "video"
         if mime_type.startswith("audio/"):
             return "audio"
-    if MessageTags.GIF in tags:
-        return "gif"
     if MessageTags.VOICE_OR_INSTANT_VIDEO in tags:
         return "voice"
     if MessageTags.MUSIC in tags:
@@ -459,7 +682,38 @@ def _kind_from_tags(tags: MessageTags, mime_type: Optional[str]) -> str:
     return "media"
 
 
+def _looks_like_sticker_metadata(metadata: dict[str, Any]) -> bool:
+    mime_type = str(metadata.get("mime_type") or "").lower()
+    file_name = str(metadata.get("file_name") or "").lower()
+    resource_keys = {str(item).lower() for item in metadata.get("resource_keys", set())}
+    if mime_type in {"application/x-tgsticker", "application/x-tgs"}:
+        return True
+    if "sticker" in file_name:
+        return True
+    if file_name.endswith(".tgs") or file_name.endswith(".webm"):
+        return True
+    return mime_type == "image/webp" and (
+        file_name == "sticker.webp" or "sticker.webp" in resource_keys
+    )
+
+
 def _attachment_title(kind: str, metadata: dict[str, Any]) -> str:
+    if kind == "sticker":
+        return "Sticker"
+    if kind == "location" and metadata.get("location"):
+        latitude, longitude = metadata["location"]
+        return f"Location {latitude:.6f}, {longitude:.6f}"
+    if kind == "webpage":
+        return str(metadata.get("web_title") or metadata.get("web_url") or "Web Page")
+    if kind == "poll":
+        return f"Poll: {metadata.get('poll_question') or 'Poll'}"
+    if kind == "contact":
+        return f"Contact: {metadata.get('contact_name') or 'Contact'}"
+    if kind == "dice":
+        value = metadata.get("dice_value")
+        return f"Dice: {value}" if value is not None else "Dice"
+    if kind == "service":
+        return str(metadata.get("action_title") or "Service message")
     if metadata.get("file_name"):
         return str(metadata["file_name"])
     titles = {
@@ -476,6 +730,28 @@ def _attachment_title(kind: str, metadata: dict[str, Any]) -> str:
 def _attachment_from_metadata(
     kind: str, metadata: dict[str, Any], reference: Optional[str] = None
 ) -> Attachment:
+    if _looks_like_sticker_metadata(metadata):
+        kind = "sticker"
+    if metadata.get("location"):
+        kind = "location"
+        latitude, longitude = metadata["location"]
+        reference = reference or _location_reference(latitude, longitude)
+        if metadata.get("file_name") is None:
+            metadata["file_name"] = "location.jpg"
+    elif metadata.get("web_url"):
+        kind = "webpage"
+        reference = reference or str(metadata["web_url"])
+    elif metadata.get("poll_question"):
+        kind = "poll"
+    elif metadata.get("contact_name") or metadata.get("contact_phone"):
+        kind = "contact"
+        reference = reference or metadata.get("contact_phone")
+    elif metadata.get("dice_value") is not None:
+        kind = "dice"
+    elif metadata.get("action_type") is not None and not any(
+        metadata.get(key) for key in ("file_name", "mime_type", "resource_keys")
+    ):
+        kind = "service"
     resource_keys = tuple(sorted(str(item) for item in metadata["resource_keys"]))[:24]
     return Attachment(
         kind=kind,
@@ -501,6 +777,7 @@ def _dedupe_attachments(attachments: Iterable[Attachment]) -> tuple[Attachment, 
             item.size,
             item.source_path,
             item.reference,
+            item.resource_keys,
         )
         if key in seen:
             continue
@@ -518,13 +795,20 @@ def build_message_attachments(
     attributes: Iterable[bytes],
     embedded_media: Iterable[bytes],
     referenced_media_ids: Iterable[tuple[int, int]],
+    referenced_media_blobs: Optional[dict[tuple[int, int], bytes]] = None,
 ) -> tuple[Attachment, ...]:
     """Build normalized attachments from Postbox message media payloads."""
     attribute_metadata = _metadata_from_blobs(attributes)
     attachments: list[Attachment] = []
     references = [_format_media_reference(*item) for item in referenced_media_ids]
+    unresolved_references = set(references)
 
-    for media_blob in embedded_media:
+    media_sources = [(media_blob, None) for media_blob in embedded_media]
+    if referenced_media_blobs:
+        for media_id, media_blob in referenced_media_blobs.items():
+            media_sources.append((media_blob, _format_media_reference(*media_id)))
+
+    for media_blob, source_reference in media_sources:
         decoded = _safe_decode_object(media_blob)
         metadata = {
             "file_name": None,
@@ -537,7 +821,11 @@ def build_message_attachments(
             _merge_metadata(metadata, _collect_media_metadata(decoded))
         _merge_metadata(metadata, attribute_metadata)
         kind = _kind_from_tags(tags, metadata.get("mime_type"))
-        reference = references[0] if len(references) == 1 else None
+        reference = source_reference or (
+            references[0] if len(references) == 1 else None
+        )
+        if source_reference:
+            unresolved_references.discard(source_reference)
         attachments.append(_attachment_from_metadata(kind, metadata, reference))
 
     if not attachments and (_has_media_tag(tags) or references):
@@ -547,8 +835,8 @@ def build_message_attachments(
             _attachment_from_metadata(kind, attribute_metadata, reference)
         )
 
-    if references and len(references) != 1:
-        for reference in references:
+    if unresolved_references and len(references) != 1:
+        for reference in sorted(unresolved_references):
             attachments.append(
                 Attachment(kind="media", title="Media", reference=reference)
             )
@@ -592,7 +880,10 @@ def read_intermediate_fwd_info(reader: ByteReader) -> Optional[dict[str, Any]]:
     }
 
 
-def read_intermediate_message(payload: bytes) -> Optional[dict[str, Any]]:
+def read_intermediate_message(
+    payload: bytes,
+    media_store: Optional[dict[tuple[int, int], bytes]] = None,
+) -> Optional[dict[str, Any]]:
     """Decode a Postbox message payload to a structured dict."""
     reader = ByteReader(io.BytesIO(payload))
     message_type = reader.read_int8()
@@ -638,6 +929,11 @@ def read_intermediate_message(payload: bytes) -> Optional[dict[str, Any]]:
         namespace = reader.read_int32()
         message_id = reader.read_int64()
         referenced_media_ids.append((namespace, message_id))
+    referenced_media_blobs = {
+        media_id: media_store[media_id]
+        for media_id in referenced_media_ids
+        if media_store and media_id in media_store
+    }
 
     return {
         "flags": flags,
@@ -647,7 +943,11 @@ def read_intermediate_message(payload: bytes) -> Optional[dict[str, Any]]:
         "text": text,
         "referenced_media_ids": referenced_media_ids,
         "attachments": build_message_attachments(
-            tags, attributes, embedded_media, referenced_media_ids
+            tags,
+            attributes,
+            embedded_media,
+            referenced_media_ids,
+            referenced_media_blobs=referenced_media_blobs,
         ),
     }
 
@@ -658,6 +958,7 @@ def iter_postbox_messages(
     start_ts: Optional[int] = None,
     end_ts: Optional[int] = None,
     limit: Optional[int] = None,
+    media_store: Optional[dict[tuple[int, int], bytes]] = None,
 ) -> list[Message]:
     """Iterate Postbox message rows and build normalized messages."""
     messages: list[Message] = []
@@ -674,7 +975,7 @@ def iter_postbox_messages(
         if end_ts is not None and idx.timestamp > end_ts:
             continue
 
-        msg = read_intermediate_message(value)
+        msg = read_intermediate_message(value, media_store=media_store)
         if not msg:
             continue
         text = msg.get("text") or ""
@@ -691,12 +992,30 @@ def iter_postbox_messages(
                 outgoing=None if incoming is None else not incoming,
                 peer_id=idx.peer_id,
                 author_id=msg.get("author_id"),
+                message_id=idx.message_id,
+                forward_info=msg.get("fwd"),
+                is_pinned=MessageTags.PINNED in msg["tags"],
                 attachments=tuple(attachments),
             )
         )
         if limit and len(messages) >= limit:
             break
     return messages
+
+
+def load_media_store(
+    rows: Iterable[tuple[bytes, bytes]],
+) -> dict[tuple[int, int], bytes]:
+    """Load referenced Postbox media blobs keyed by (namespace, media_id)."""
+    media: dict[tuple[int, int], bytes] = {}
+    for key, value in rows:
+        if not isinstance(key, (bytes, bytearray)) or len(key) != 12:
+            continue
+        if not isinstance(value, (bytes, bytearray)):
+            continue
+        namespace, media_id = struct.unpack(">iq", key)
+        media[(namespace, media_id)] = bytes(value)
+    return media
 
 
 def parse_peer_key(raw_key: Any) -> Optional[int]:
@@ -719,6 +1038,19 @@ def peer_display(peer: Any) -> Optional[str]:
     if "un" in peer:
         return f"@{peer.get('un')}"
     return None
+
+
+def peer_username(peer: Any) -> Optional[str]:
+    """Extract a public @username from a decoded peer payload."""
+    if not isinstance(peer, dict):
+        return None
+    username = _str_value(peer.get("un"))
+    if not username:
+        return None
+    username = username.lstrip("@").strip()
+    if not username:
+        return None
+    return f"@{username}"
 
 
 def _flat_peer_keys(peer: Any) -> set[str]:
@@ -772,6 +1104,36 @@ def peer_kind(peer: Any) -> str:
     return "unknown"
 
 
+def peer_avatar_resource_keys(peer: Any) -> tuple[str, ...]:
+    """Extract Telegram peer-photo resource names from decoded peer metadata."""
+    keys: list[str] = []
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            resource = value.get("r")
+            if isinstance(resource, dict):
+                datacenter_id = _int_value(resource.get("d"))
+                photo_id = _int_value(resource.get("p"))
+                size_id = _int_value(resource.get("s"))
+                if datacenter_id is not None and photo_id is not None:
+                    sizes = [size_id] if size_id is not None else []
+                    if 0 not in sizes:
+                        sizes.append(0)
+                    for size in sizes:
+                        keys.append(
+                            "telegram-peer-photo-size-"
+                            f"{datacenter_id}-{photo_id}-{size}-0-0"
+                        )
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                visit(child)
+
+    visit(peer)
+    return tuple(dict.fromkeys(keys))
+
+
 def list_peers_postbox(
     rows: Iterable[tuple[bytes, bytes]],
     term: Optional[str],
@@ -789,9 +1151,12 @@ def list_peers_postbox(
         display = peer_display(data)
         if not display:
             continue
+        username = peer_username(data)
         if term and term.lower() not in display.lower():
-            continue
-        results.append(("t2", peer_id, f"{display} [{peer_kind(data)}]"))
+            if not username or term.lower() not in username.lower():
+                continue
+        suffix = f" {username}" if username and username != display else ""
+        results.append(("t2", peer_id, f"{display}{suffix} [{peer_kind(data)}]"))
     return results
 
 
@@ -817,5 +1182,7 @@ def load_peer_info(rows: Iterable[tuple[bytes, bytes]]) -> dict[int, PeerInfo]:
                 peer_id=peer_id,
                 title=display,
                 kind=peer_kind(data),
+                username=peer_username(data),
+                avatar_resource_keys=peer_avatar_resource_keys(data),
             )
     return peer_info

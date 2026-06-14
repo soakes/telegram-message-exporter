@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
 import sqlite3
 
-from . import __version__, crypto
+from . import __version__
 from .db import (
     FetchOptions,
     detect_message_table,
@@ -28,17 +30,17 @@ from .exporters import (
     render_html,
     render_markdown,
 )
-from .media import copy_message_media
-from .postbox import (
-    iter_postbox_messages,
-    list_peers_postbox,
-    load_peer_info,
-)
+from .media import copy_export_media
+from .models import Message, PeerInfo
+from .paths import discover_dump, discover_media_roots, media_roots_from_context
+from .paths import write_source_context
 from .utils import parse_date_input
 
 
 def cmd_decrypt(args: argparse.Namespace) -> None:
     """Decrypt an encrypted Telegram DB."""
+    from . import crypto
+
     key_path = Path(args.key).expanduser()
     db_path = Path(args.db).expanduser()
     out_path = Path(args.out).expanduser()
@@ -61,6 +63,7 @@ def cmd_decrypt(args: argparse.Namespace) -> None:
         )
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
+    write_source_context(out_path, db_path)
     print(f"Decrypted DB written to {out_path} ({size_mb:.2f} MB)")
 
 
@@ -90,6 +93,32 @@ def cmd_diagnose(args: argparse.Namespace) -> None:
     conn.close()
 
 
+def cmd_discover(args: argparse.Namespace) -> None:
+    """Print useful paths from a Telegram local dump."""
+    root = Path(args.dump_root).expanduser() if args.dump_root else None
+    discovery = discover_dump(root)
+    print(f"Telegram root: {discovery.root}")
+    print(f"Key: {discovery.key_path or 'not found'}")
+    if not discovery.accounts:
+        print("No account-* directories found.")
+        return
+
+    for index, account in enumerate(discovery.accounts, start=1):
+        print(f"\nAccount {index}: {account.account_dir.name}")
+        print(f"  Messages DB: {account.message_db or 'not found'}")
+        print(f"  Media root:  {account.media_root or 'not found'}")
+        print(f"  Media DB:    {account.media_storage_db or 'not found'}")
+        print(f"  Cache DB:    {account.media_cache_db or 'not found'}")
+
+    first = discovery.accounts[0]
+    if discovery.key_path and first.message_db:
+        print("\nSuggested decrypt command:")
+        print("  telegram-exporter decrypt \\")
+        print(f"    --key {shlex.quote(str(discovery.key_path))} \\")
+        print(f"    --db {shlex.quote(str(first.message_db))} \\")
+        print("    --out recovery/plaintext.db")
+
+
 def cmd_list_peers(args: argparse.Namespace) -> None:
     """List peer IDs from a plaintext DB."""
     db_path = Path(args.db).expanduser()
@@ -99,6 +128,8 @@ def cmd_list_peers(args: argparse.Namespace) -> None:
     conn = sqlite3.connect(str(db_path))
     results = []
     if "t2" in list_tables(conn) and is_postbox_kv_table(conn, "t2"):
+        from .postbox import list_peers_postbox
+
         rows = conn.execute("SELECT key, value FROM t2").fetchall()
         results = list_peers_postbox(rows, args.search)
     else:
@@ -116,12 +147,17 @@ def cmd_list_peers(args: argparse.Namespace) -> None:
 
 def cmd_export(args: argparse.Namespace) -> None:
     """Export messages to Markdown, HTML, or CSV."""
+    progress = None if args.no_progress else _export_progress
     db_path = Path(args.db).expanduser()
     if not db_path.exists():
         raise SystemExit(f"Database file not found: {db_path}")
 
+    if progress:
+        progress(f"Opening database: {db_path}")
     conn = sqlite3.connect(str(db_path))
     table = args.table or detect_message_table(conn)
+    if progress:
+        progress(f"Using table: {table}")
 
     peer_id = _resolve_peer_id(conn, args.contact, args.peer_id)
 
@@ -135,9 +171,21 @@ def cmd_export(args: argparse.Namespace) -> None:
     peer_map: Optional[dict[int, str]] = None
     peer_info = None
     if is_postbox_kv_table(conn, table):
+        from .postbox import iter_postbox_messages, load_media_store, load_peer_info
+
+        if progress:
+            progress("Loading peer metadata")
         peer_rows = conn.execute("SELECT key, value FROM t2").fetchall()
         peer_info = load_peer_info(peer_rows)
         peer_map = {peer_id: info.title for peer_id, info in peer_info.items()}
+        media_store = {}
+        if "t6" in list_tables(conn):
+            if progress:
+                progress("Loading media reference metadata")
+            media_rows = conn.execute("SELECT key, value FROM t6").fetchall()
+            media_store = load_media_store(media_rows)
+        if progress:
+            progress("Reading and decoding messages")
         rows = conn.execute(f"SELECT key, value FROM {table} ORDER BY key").fetchall()
         messages = iter_postbox_messages(
             rows,
@@ -145,31 +193,48 @@ def cmd_export(args: argparse.Namespace) -> None:
             start_ts=options.start_ts,
             end_ts=options.end_ts,
             limit=options.limit,
+            media_store=media_store,
         )
     else:
+        if progress:
+            progress("Reading messages")
         messages = fetch_messages(conn, table, options)
     conn.close()
 
     if not messages:
         raise SystemExit("No messages found with the current filters.")
+    if progress:
+        progress(f"Decoded {len(messages)} messages")
+
+    me_info = _infer_exported_user(messages, peer_info)
+    me_name = args.me_name
+    if me_name == "Me" and me_info:
+        me_name = me_info.title
 
     title = args.contact or _title_from_peer(peer_map, peer_id)
     out_path = (
         Path(args.out).expanduser() if args.out else _default_out_path(args.format)
     )
 
-    if args.copy_media or args.media_root:
-        media_root = Path(args.media_root).expanduser() if args.media_root else None
+    media_roots = _resolve_media_roots(args, db_path)
+    if args.copy_media or args.media_root or media_roots:
+        if progress:
+            progress("Copying locally available media")
         media_dir = Path(args.media_dir).expanduser() if args.media_dir else None
-        messages, media_report = copy_message_media(
+        messages, peer_info, media_report = copy_export_media(
             messages,
             out_path,
-            media_root=media_root,
+            media_roots=media_roots,
             media_dir=media_dir,
+            peer_info=peer_info,
+            progress=progress,
+            media_workers=args.media_workers,
         )
     else:
         media_report = None
 
+    if progress:
+        progress(f"Writing {args.format} export")
     if args.format == "md":
         render_markdown(
             messages,
@@ -177,12 +242,12 @@ def cmd_export(args: argparse.Namespace) -> None:
             out_path,
             options=RenderOptions(
                 peer_map=peer_map,
-                me_name=args.me_name,
+                me_name=me_name,
                 show_direction=args.show_direction,
             ),
         )
     elif args.format == "csv":
-        render_csv(messages, out_path, peer_map=peer_map, me_name=args.me_name)
+        render_csv(messages, out_path, peer_map=peer_map, me_name=me_name)
     elif args.format == "html":
         render_html(
             messages,
@@ -190,8 +255,9 @@ def cmd_export(args: argparse.Namespace) -> None:
             out_path,
             peer_map=peer_map,
             peer_info=peer_info,
-            me_name=args.me_name,
-            split=args.split_html,
+            me_name=me_name,
+            me_info=me_info,
+            split=not args.single_html,
         )
     else:
         raise SystemExit(f"Unknown format: {args.format}")
@@ -202,8 +268,35 @@ def cmd_export(args: argparse.Namespace) -> None:
             "Media export: "
             f"{media_report.copied} copied, {media_report.missing} unresolved"
         )
+        if media_report.avatars_copied or media_report.avatars_missing:
+            print(
+                "Avatar export: "
+                f"{media_report.avatars_copied} copied, "
+                f"{media_report.avatars_missing} unresolved"
+            )
         if media_report.media_dir:
             print(f"Media directory: {media_report.media_dir}")
+
+
+def _export_progress(message: str) -> None:
+    print(f"[export] {message}", file=sys.stderr, flush=True)
+
+
+def _infer_exported_user(
+    messages: list[Message],
+    peer_info: Optional[dict[int, PeerInfo]],
+) -> Optional[PeerInfo]:
+    if not peer_info:
+        return None
+    outgoing_authors = Counter(
+        msg.author_id
+        for msg in messages
+        if msg.outgoing is True and msg.author_id in peer_info
+    )
+    if not outgoing_authors:
+        return None
+    peer_id, _ = outgoing_authors.most_common(1)[0]
+    return peer_info.get(peer_id)
 
 
 def _title_from_peer(peer_map: Optional[dict[int, str]], peer_id: Optional[int]) -> str:
@@ -238,6 +331,24 @@ def _resolve_peer_id(
     raise SystemExit("Contact name not found. Use list-peers or provide --peer-id.")
 
 
+def _resolve_media_roots(args: argparse.Namespace, db_path: Path) -> tuple[Path, ...]:
+    roots = []
+    if getattr(args, "media_root", None):
+        roots.append(Path(args.media_root).expanduser())
+    if getattr(args, "dump_root", None):
+        roots.extend(
+            discover_media_roots(Path(args.dump_root).expanduser())
+        )
+    if not roots:
+        roots.extend(media_roots_from_context(db_path))
+    if getattr(args, "copy_media", False) and not roots:
+        try:
+            roots.extend(discover_media_roots())
+        except OSError:
+            pass
+    return tuple(dict.fromkeys(root for root in roots if root.exists()))
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -266,6 +377,16 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose.add_argument("--db", required=True, help="Path to plaintext DB")
     diagnose.add_argument("--table", help="Table name to sample")
     diagnose.set_defaults(func=cmd_diagnose)
+
+    discover = subparsers.add_parser("discover", help="Find paths in a Telegram dump")
+    discover.add_argument(
+        "--dump-root",
+        help=(
+            "Root of a copied Telegram container/dump. "
+            "Defaults to Telegram's standard macOS Group Containers path."
+        ),
+    )
+    discover.set_defaults(func=cmd_discover)
 
     list_peers = subparsers.add_parser("list-peers", help="Find peer IDs by name")
     list_peers.add_argument("--db", required=True, help="Path to plaintext DB")
@@ -307,12 +428,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for copied media (defaults to <export-name>_media)",
     )
     export.add_argument(
-        "--split-html",
+        "--media-workers",
+        type=int,
+        help="Number of parallel workers for copying media files",
+    )
+    export.add_argument(
+        "--single-html",
         action="store_true",
-        help="Write one HTML index plus separate per-chat HTML files",
+        help="Write a single HTML file instead of split per-chat pages",
     )
     export.add_argument(
         "--show-direction", action="store_true", help="Append (in)/(out) labels"
+    )
+    export.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Do not print export progress to stderr",
     )
     export.set_defaults(func=cmd_export)
 

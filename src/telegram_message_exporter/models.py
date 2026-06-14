@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,9 @@ class PeerInfo:
     peer_id: int
     title: str
     kind: str = "unknown"
+    username: Optional[str] = None
+    avatar_resource_keys: tuple[str, ...] = field(default_factory=tuple)
+    avatar_path: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,9 @@ class Message:
     outgoing: Optional[bool]
     peer_id: Optional[int]
     author_id: Optional[int]
+    message_id: Optional[int] = None
+    forward_info: Optional[dict[str, Any]] = None
+    is_pinned: bool = False
     attachments: tuple[Attachment, ...] = field(default_factory=tuple)
 
     def speaker_hint(self) -> str:
