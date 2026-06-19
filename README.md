@@ -203,6 +203,12 @@ ls -la "$TELEGRAM_STABLE"
 ls "$TELEGRAM_STABLE"/account-*/postbox/db/db_sqlite
 ```
 
+You can also ask the CLI to print likely key, database, and media paths:
+
+```bash
+telegram-exporter discover
+```
+
 You need:
 
 - `.tempkeyEncrypted`, which is hidden from plain `ls` because it starts with `.`
@@ -249,6 +255,17 @@ telegram-exporter export \
 <a id="usage"></a>
 
 ## 🧪 Usage
+
+### Discover local Telegram paths
+
+```bash
+telegram-exporter discover
+```
+
+The command checks the normal native Telegram for macOS storage root and prints
+any detected `.tempkeyEncrypted`, raw `.tempkey`, account database, and media
+cache paths. Use `--root` to inspect a copied Telegram storage directory instead
+of the live default path.
 
 ### Export HTML for one chat
 
@@ -349,6 +366,7 @@ telegram-exporter decrypt \
 | --- | --- |
 | `decrypt` | Decrypt Telegram's encrypted `db_sqlite` to a plaintext SQLite file |
 | `diagnose` | List tables, columns, and sample rows from a plaintext database |
+| `discover` | Print likely local Telegram key, database, and media paths |
 | `list-peers` | Find likely peer IDs by name fragment |
 | `export` | Render messages to HTML, Markdown, or CSV |
 
@@ -368,6 +386,12 @@ telegram-exporter decrypt \
 | --- | --- | --- |
 | `--db` | yes | Path to plaintext SQLite database |
 | `--table` | no | Table to sample; defaults to `t7` when present |
+
+### `discover`
+
+| Flag | Required | Description |
+| --- | --- | --- |
+| `--root` | no | Telegram storage root to inspect; defaults to the native macOS stable path |
 
 ### `list-peers`
 
@@ -607,6 +631,7 @@ telegram-message-exporter/
 │       ├── exporters.py               # HTML, Markdown, and CSV renderers
 │       ├── hashing.py                 # MurmurHash helper
 │       ├── models.py                  # Message data model
+│       ├── paths.py                   # Telegram local path discovery
 │       ├── postbox.py                 # Postbox parsing utilities
 │       ├── schema.py                  # Postbox schema constants
 │       └── utils.py                   # Date parsing and link helpers
