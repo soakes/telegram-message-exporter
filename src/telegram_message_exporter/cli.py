@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 from pathlib import Path
 from typing import Optional
@@ -37,6 +38,7 @@ from .postbox import (
     list_peers_postbox,
     load_peer_map,
 )
+from .paths import TelegramPathDiscovery, discover_telegram_paths
 from .schema import PostboxTable
 from .utils import parse_date_input
 
@@ -118,6 +120,15 @@ def cmd_list_peers(args: argparse.Namespace) -> None:
     print("Possible peers:")
     for table_name, peer_id, display in results:
         print(f"  {peer_id}  {display}  (table={table_name})")
+
+
+def cmd_discover(args: argparse.Namespace) -> None:
+    """Print likely native Telegram for macOS recovery paths."""
+    root = Path(args.root).expanduser() if args.root else None
+    discovery = discover_telegram_paths(root)
+
+    for line in _format_discovery(discovery):
+        print(line)
 
 
 def cmd_export(args: argparse.Namespace) -> None:
@@ -233,6 +244,65 @@ def _default_out_path(fmt: str) -> Path:
     return Path(f"chat_export.{suffix}")
 
 
+def _format_discovery(discovery: TelegramPathDiscovery) -> list[str]:
+    lines = [f"Telegram root: {discovery.root}"]
+    lines.append(_path_status("Encrypted key", discovery.encrypted_key_path))
+    lines.append(_path_status("Raw key", discovery.raw_key_path))
+
+    if not discovery.accounts:
+        lines.append("No account-* directories found.")
+        return lines
+
+    for index, account in enumerate(discovery.accounts, start=1):
+        lines.extend(
+            [
+                "",
+                f"Account {index}: {account.account_dir.name}",
+                _path_status("  Messages DB", account.db_path),
+                _path_status("  Media dir", account.media_dir),
+            ]
+        )
+
+    key_path = discovery.encrypted_key_path or discovery.raw_key_path
+    first_db_account = next(
+        (account for account in discovery.accounts if account.db_path is not None),
+        None,
+    )
+    if key_path and first_db_account and first_db_account.db_path:
+        lines.extend(
+            [
+                "",
+                "Suggested decrypt command:",
+                "  telegram-exporter decrypt \\",
+                f"    --key {_quote_path(key_path)} \\",
+                f"    --db {_quote_path(first_db_account.db_path)} \\",
+                "    --out recovery/plaintext.db",
+            ]
+        )
+        if first_db_account.media_dir:
+            lines.extend(
+                [
+                    "",
+                    "Suggested HTML export with cached media:",
+                    "  telegram-exporter export \\",
+                    "    --db recovery/plaintext.db \\",
+                    f"    --media-dir {_quote_path(first_db_account.media_dir)} \\",
+                    "    --format html \\",
+                    "    --out recovery/chat.html",
+                ]
+            )
+
+    return lines
+
+
+def _path_status(label: str, path: Optional[Path]) -> str:
+    return f"{label}: {path if path else 'not found'}"
+
+
+def _quote_path(path: Path) -> str:
+    return shlex.quote(str(path))
+
+
 def _resolve_media_dir(value: Optional[str], db_path: Path) -> Optional[Path]:
     if value:
         media_dir = Path(value).expanduser()
@@ -325,6 +395,15 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose.add_argument("--db", required=True, help="Path to plaintext DB")
     diagnose.add_argument("--table", help="Table name to sample")
     diagnose.set_defaults(func=cmd_diagnose)
+
+    discover = subparsers.add_parser(
+        "discover", help="Find likely local Telegram paths"
+    )
+    discover.add_argument(
+        "--root",
+        help="Telegram storage root to inspect (defaults to native macOS stable path)",
+    )
+    discover.set_defaults(func=cmd_discover)
 
     list_peers = subparsers.add_parser("list-peers", help="Find peer IDs by name")
     list_peers.add_argument("--db", required=True, help="Path to plaintext DB")

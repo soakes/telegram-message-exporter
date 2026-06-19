@@ -3,12 +3,14 @@ from __future__ import annotations
 import sqlite3
 
 from telegram_message_exporter.cli import (
+    _format_discovery,
     _referenced_peer_ids,
     _resolve_media_dir,
     build_parser,
 )
 from telegram_message_exporter.db import FetchOptions
 from telegram_message_exporter.models import ForwardInfo, Message
+from telegram_message_exporter.paths import discover_telegram_paths
 
 
 def test_export_parser_keeps_me_name_and_adds_media_debug() -> None:
@@ -31,6 +33,38 @@ def test_export_parser_keeps_me_name_and_adds_media_debug() -> None:
     assert args.me_name == "Simon"
     assert args.media_dir == "media"
     assert args.debug is True
+
+
+def test_discover_parser_accepts_root() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["discover", "--root", "/tmp/telegram"])
+
+    assert args.command == "discover"
+    assert args.root == "/tmp/telegram"
+
+
+def test_format_discovery_includes_suggested_commands(tmp_path) -> None:
+    root = tmp_path / "stable"
+    account_dir = root / "account-123" / "postbox"
+    db_dir = account_dir / "db"
+    media_dir = account_dir / "media"
+    db_dir.mkdir(parents=True)
+    media_dir.mkdir()
+    (root / ".tempkeyEncrypted").write_bytes(b"key")
+    (db_dir / "db_sqlite").write_bytes(b"db")
+
+    output = "\n".join(_format_discovery(discover_telegram_paths(root)))
+
+    assert f"Telegram root: {root}" in output
+    assert "Account 1: account-123" in output
+    assert "Suggested decrypt command:" in output
+    assert "Suggested HTML export with cached media:" in output
+
+
+def test_format_discovery_reports_no_accounts(tmp_path) -> None:
+    output = "\n".join(_format_discovery(discover_telegram_paths(tmp_path)))
+
+    assert "No account-* directories found." in output
 
 
 def test_resolve_media_dir_autodetects_sibling_media(tmp_path) -> None:
