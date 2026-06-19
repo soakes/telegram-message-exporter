@@ -628,6 +628,9 @@ This project builds on community reverse-engineering work. Special thanks to
 [reference implementation](https://gist.github.com/stek29/8a7ac0e673818917525ec4031d77a713)
 of Telegram for macOS local key format and Postbox structure.
 
+Thanks to **[@ivankruchkoff](https://github.com/ivankruchkoff)** for reporting
+and contributing support for raw `.tempkey` files.
+
 ---
 
 <a id="contributing"></a>
