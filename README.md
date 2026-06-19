@@ -656,6 +656,9 @@ of Telegram for macOS local key format and Postbox structure.
 Thanks to **[@ivankruchkoff](https://github.com/ivankruchkoff)** for reporting
 and contributing support for raw `.tempkey` files.
 
+Thanks to **[@0x241](https://github.com/0x241)** for the local path discovery
+and media recovery UX ideas that informed the `discover` command.
+
 ---
 
 <a id="contributing"></a>
