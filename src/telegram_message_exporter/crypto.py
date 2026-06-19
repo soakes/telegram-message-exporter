@@ -140,8 +140,11 @@ def _decrypt_key_cbc(encrypted: bytes, passcode: bytes) -> Optional[bytes]:
         return None
     key = hashlib.sha512(passcode).digest()[:32]
     iv = encrypted[:16]
+    payload = encrypted[16:]
+    if len(payload) % 16 != 0:
+        return None
     cipher = AES.new(key, AES.MODE_CBC, iv)
-    decrypted = cipher.decrypt(encrypted[16:])
+    decrypted = cipher.decrypt(payload)
 
     padding_length = decrypted[-1]
     if padding_length <= 0 or padding_length > 16:
@@ -251,6 +254,10 @@ def derive_key_candidates(
     encrypted = key_path.read_bytes()
     candidates: list[KeyCandidate] = []
     tempkey_ok = False
+
+    if len(encrypted) == 48:
+        tempkey_ok = True
+        candidates.append(KeyCandidate("raw-48-tempkey", encrypted.hex()))
 
     for passcode in passcodes:
         parsed = _parse_tempkey(encrypted, passcode)
