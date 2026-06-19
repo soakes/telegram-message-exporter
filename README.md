@@ -98,6 +98,8 @@ messages back into Telegram, or upload recovered data anywhere.
   date, and end date
 - **Readable output**: writes styled HTML, Markdown, or CSV with timestamps,
   speakers, directions, and link handling
+- **Forward and media metadata**: decodes forwarded-message context and locally
+  cached attachment references when Telegram's Postbox payloads contain them
 - **Diagnostics**: samples tables and rows when Telegram storage changes or a
   cache does not match the expected shape
 
@@ -254,10 +256,16 @@ telegram-exporter export \
 telegram-exporter export \
   --db recovery/plaintext.db \
   --peer-id 123456789 \
+  --media-dir "$HOME/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable/account-123456/postbox/media" \
   --format html \
   --me-name "Me" \
   --out recovery/chat.html
 ```
+
+When `--media-dir` is supplied, cached attachments referenced by exported
+messages are copied to `recovery/chat_media/` and linked from the transcript.
+If the database is used directly from its original `postbox/db/` directory,
+the sibling `postbox/media/` directory is detected automatically.
 
 ### Export by contact name
 
@@ -292,6 +300,22 @@ telegram-exporter export \
   --format csv \
   --out recovery/all-chats.csv
 ```
+
+### Debug export queries
+
+```bash
+telegram-exporter export \
+  --db recovery/plaintext.db \
+  --peer-id 123456789 \
+  --start-date 2024-01-01 \
+  --end-date 2024-12-31 \
+  --debug
+```
+
+Debug output is written to stderr and includes SQL statements, Postbox key
+bounds, `EXPLAIN QUERY PLAN` output, elapsed time, and row counts. Targeted
+Postbox exports use the message key index for the requested peer and still apply
+date filtering after key decoding so newer namespaces are not silently dropped.
 
 ### Inspect an unfamiliar database
 
@@ -366,7 +390,9 @@ telegram-exporter decrypt \
 | `--format` | no | `html`, `md`, or `csv`; default `md` |
 | `--out` | no | Output path; defaults to `chat_export.<format>` |
 | `--me-name` | no | Display label for outgoing messages; default `Me` |
+| `--media-dir` | no | Telegram `postbox/media` cache; copies referenced files beside the export |
 | `--show-direction` | no | Append `(in)` or `(out)` labels in Markdown |
+| `--debug` | no | Print SQL key ranges and `EXPLAIN QUERY PLAN` output |
 
 ---
 
@@ -378,7 +404,7 @@ telegram-exporter decrypt \
 | --- | --- | --- |
 | `html` | Reading and sharing a polished transcript | Includes summary cards, date jump, back-to-top, and link handling |
 | `md` | Archival text, notes, version control | Compact, portable, and easy to diff |
-| `csv` | Analysis in spreadsheets or scripts | Includes date, time, Unix timestamp, direction, speaker, text, peer ID, and author ID |
+| `csv` | Analysis in spreadsheets or scripts | Includes existing message columns plus JSON attachment and forward metadata columns |
 
 ### Markdown snippet
 
@@ -476,7 +502,8 @@ telegram-exporter decrypt \
 - Does not bypass a Telegram local passcode; you need the passcode.
 - Does not recover messages that no longer exist in the local cache.
 - Does not download content from Telegram servers.
-- Does not currently extract media files from Telegram's file cache.
+- Only locally cached media can be copied; unavailable files are represented by
+  attachment metadata and are not downloaded.
 - Some newer or uncommon Telegram message payloads may only partially decode.
 - Does not support Telegram Desktop/Qt, the Mac App Store version, mobile
   backups, or Telegram cloud export archives.
@@ -511,8 +538,10 @@ storage setup, so it is outside the supported recovery path.
 
 ### Can it recover photos, videos, or documents?
 
-Not currently. The exporter focuses on decoded message text and transcript
-metadata.
+Yes, when the corresponding files still exist in Telegram's local
+`postbox/media` cache. Pass `--media-dir`; the exporter copies referenced files
+beside the transcript. Missing cache files are listed as attachment metadata but
+cannot be downloaded.
 
 ---
 
@@ -541,13 +570,15 @@ Use the helper script when preparing a version bump:
 
 ## 🧹 Quality Checks
 
-The CI workflow runs Black, Ruff, and Pylint across Python 3.10 through 3.14.
+The CI workflow runs Black, Ruff, Pylint, and pytest across Python 3.10 through
+3.14.
 
 ```bash
-pip install black ruff pylint
-black --check src/telegram_message_exporter telegram_exporter.py .github/scripts/bump_version.py
-ruff check src/telegram_message_exporter telegram_exporter.py .github/scripts/bump_version.py
+pip install black ruff pylint pytest
+black --check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
+ruff check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
 pylint src/telegram_message_exporter telegram_exporter.py
+pytest -q
 ```
 
 ---
@@ -577,7 +608,9 @@ telegram-message-exporter/
 │       ├── hashing.py                 # MurmurHash helper
 │       ├── models.py                  # Message data model
 │       ├── postbox.py                 # Postbox parsing utilities
+│       ├── schema.py                  # Postbox schema constants
 │       └── utils.py                   # Date parsing and link helpers
+├── tests/                             # Unit and CLI smoke tests
 ├── requirements.txt                   # Runtime dependencies
 ├── VERSION                            # Canonical package version
 ├── LICENSE
