@@ -7,7 +7,7 @@ name = "telegram-message-exporter"
 dynamic = ["version"]
 description = "Offline recovery and export tool for Telegram Desktop (macOS)."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "pycryptodomex>=3.20.0",
   "mmh3==4.1.0",
@@ -40,7 +40,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
