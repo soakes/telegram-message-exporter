@@ -3,7 +3,7 @@
 > Offline recovery and transcript export for the native Telegram for macOS app.
 
 [![Validate](https://img.shields.io/github/actions/workflow/status/soakes/telegram-message-exporter/build-and-validate.yml?branch=main&style=flat-square&label=validate)](https://github.com/soakes/telegram-message-exporter/actions/workflows/build-and-validate.yml)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-macOS-111111.svg?style=flat-square&logo=apple&logoColor=white)](#requirements)
 [![Telegram](https://img.shields.io/badge/Telegram-native%20macOS-2CA5E0.svg?style=flat-square&logo=telegram&logoColor=white)](https://macos.telegram.org/)
 [![License](https://img.shields.io/badge/License-MIT-2EA043.svg?style=flat-square)](LICENSE)
@@ -158,7 +158,7 @@ sequenceDiagram
 ## ✅ Requirements
 
 - macOS with native Telegram for macOS data present
-- Python 3.10 or newer
+- Python 3.11 or newer
 - SQLCipher support for the `sqlcipher3` Python package
 - Telegram local passcode, if Passcode Lock was enabled
 - A virtual environment for local installs
@@ -595,7 +595,7 @@ Use the helper script when preparing a version bump:
 ## 🧹 Quality Checks
 
 The Build and Validate workflow runs Black, Ruff, Pylint, pytest, a package
-build, and a CLI smoke test across Python 3.10 through 3.14. The tool versions
+build, and a CLI smoke test across Python 3.11 through 3.15. The tool versions
 are pinned in the `dev` extra so local runs match CI.
 
 ```bash
