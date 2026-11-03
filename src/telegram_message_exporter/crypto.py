@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import importlib
 import os
+import shutil
 import struct
+import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -398,15 +400,37 @@ def decrypt_database(
     out_path: Path,
     passcodes: Iterable[bytes],
 ) -> DecryptResult:
-    """Decrypt an encrypted Telegram database into a plaintext SQLite DB."""
+    """Decrypt an encrypted Telegram database into a plaintext SQLite DB.
+
+    Telegram keeps db_sqlite in WAL mode. Closing the last connection to a WAL
+    database checkpoints the -wal file into it and deletes the sidecars, so the
+    database is only ever opened from a temporary copy.
+    """
     key_info = derive_key_candidates(key_path, passcodes)
     if not key_info.candidates:
         raise SystemExit("Unable to derive any key material from .tempkeyEncrypted.")
 
-    match = open_sqlcipher_connection(db_path, key_info.candidates, build_profiles())
-    if match is None:
-        raise SystemExit("Failed to decrypt database. Check passcode and key file.")
-
-    export_plaintext_db(match.connection, out_path)
-    match.connection.close()
+    with tempfile.TemporaryDirectory(prefix="telegram-exporter-") as work_dir:
+        work_db = _copy_database(db_path, Path(work_dir))
+        match = open_sqlcipher_connection(
+            work_db, key_info.candidates, build_profiles()
+        )
+        if match is None:
+            raise SystemExit("Failed to decrypt database. Check passcode and key file.")
+        try:
+            export_plaintext_db(match.connection, out_path)
+        finally:
+            match.connection.close()
     return DecryptResult(key_info, match)
+
+
+def _copy_database(db_path: Path, work_dir: Path) -> Path:
+    """Copy db_sqlite and its -wal file, which holds the newest pages."""
+    # The -shm wal-index belongs to whichever process had the database open;
+    # SQLite rebuilds it from the -wal file, so it is not copied.
+    work_db = work_dir / db_path.name
+    shutil.copyfile(db_path, work_db)
+    wal_path = db_path.with_name(f"{db_path.name}-wal")
+    if wal_path.is_file():
+        shutil.copyfile(wal_path, work_dir / wal_path.name)
+    return work_db
