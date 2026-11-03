@@ -1,0 +1,289 @@
+name: Dependabot Merge
+
+run-name: "Dependabot Merge${{ github.event.workflow_run.pull_requests[0].number && format(' - PR #{0}', github.event.workflow_run.pull_requests[0].number) || format(' - {0} scan', github.event_name) }}"
+
+# Merges a Dependabot pull request once Build and Validate has passed on its exact head.
+# It does not use GitHub's auto-merge setting, which is off for this repository.
+#
+# The main ruleset requires branches to be up to date, and Dependabot only rebases a
+# pull request that conflicts, so one that is merely behind would wait forever. Such a
+# branch is refreshed by merging main into it with [dependabot skip] in the commit
+# message; Dependabot keeps rebasing and regenerating over marked commits, but stops
+# after an unmarked one. A push made with GITHUB_TOKEN starts no pull_request run, so
+# without DEPENDABOT_AUTOMERGE_TOKEN the refreshed branch is validated by dispatching
+# Build and Validate on it, and that run brings this workflow back.
+#
+# The daily scan, after Dependabot's morning run, revisits pull requests that no
+# validation run brought back, and fails when a Dependabot update job failed since the
+# previous scan, so a broken updater is reported instead of skipping updates silently.
+"on":
+  workflow_dispatch:
+  schedule:
+    - cron: '15 6 * * *'
+  workflow_run:
+    workflows:
+      - Build and Validate
+    types:
+      - completed
+    branches-ignore:
+      - main
+
+concurrency:
+  group: dependabot-merge
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  checks: read
+  contents: write
+  pull-requests: write
+  statuses: read
+
+jobs:
+  merge:
+    name: Review and Merge Dependabot Pull Requests
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'workflow_dispatch')
+      )
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Review and merge validated Dependabot pull requests
+        env:
+          AUTOMERGE_TOKEN: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
+          DEFAULT_GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          WORKFLOW_RUN_PULL_REQUESTS: ${{ github.event_name == 'workflow_run' && toJson(github.event.workflow_run.pull_requests) || '[]' }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || '' }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+          WORKFLOW_RUN_URL: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.html_url || '' }}
+        run: |
+          set -euo pipefail
+
+          export GH_TOKEN="${AUTOMERGE_TOKEN:-${DEFAULT_GH_TOKEN}}"
+
+          prs="$(printf '%s\n' "${WORKFLOW_RUN_PULL_REQUESTS:-[]}" | jq -r '.[].number')"
+          prs="$(printf '%s\n' "${prs}" | sed '/^$/d')"
+
+          if [ -z "${prs}" ]; then
+            if [ -n "${WORKFLOW_RUN_HEAD_BRANCH:-}" ]; then
+              prs="$(
+                gh pr list --state open --head "${WORKFLOW_RUN_HEAD_BRANCH}" --limit 100 \
+                  --json number --jq '.[].number'
+              )"
+            else
+              prs="$(gh pr list --state open --limit 100 --json number --jq '.[].number')"
+            fi
+          fi
+
+          {
+            printf '## Dependabot Merge\n\n'
+            printf '| Pull Request | Result | Details |\n'
+            printf '| --- | --- | --- |\n'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          merged=0
+          updated=0
+          skipped=0
+
+          escape_markdown() {
+            printf '%s' "$1" | sed 's/|/\\|/g'
+          }
+
+          successful_validation_url() {
+            local head_sha="$1"
+
+            gh run list \
+              --workflow "Build and Validate" \
+              --limit 100 \
+              --json headSha,event,conclusion,url \
+              --jq '.[] | select((.event == "pull_request" or .event == "workflow_dispatch") and .headSha == "'"${head_sha}"'" and .conclusion == "success") | .url' \
+              | head -n1
+          }
+
+          while IFS= read -r pr_number; do
+            [ -n "${pr_number}" ] || continue
+
+            pr_json="$(
+              gh pr view "${pr_number}" \
+                --json number,title,url,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid,author
+            )"
+            title="$(jq -r '.title' <<<"${pr_json}")"
+            url="$(jq -r '.url' <<<"${pr_json}")"
+            author="$(jq -r '.author.login // ""' <<<"${pr_json}")"
+            state="$(jq -r '.state' <<<"${pr_json}")"
+            draft="$(jq -r '.isDraft | tostring' <<<"${pr_json}")"
+            base_ref="$(jq -r '.baseRefName' <<<"${pr_json}")"
+            base_sha="$(jq -r '.baseRefOid // ""' <<<"${pr_json}")"
+            head_sha="$(jq -r '.headRefOid // ""' <<<"${pr_json}")"
+            head_ref="$(jq -r '.headRefName // ""' <<<"${pr_json}")"
+
+            if [ "${author}" != "dependabot[bot]" ] && [ "${author}" != "dependabot" ] && [ "${author}" != "app/dependabot" ]; then
+              skipped=$((skipped + 1))
+              printf '| [#%s](%s) | skipped | Not a Dependabot pull request. |\n' "${pr_number}" "${url}" >> "${GITHUB_STEP_SUMMARY}"
+              continue
+            fi
+
+            if [ "${state}" != "OPEN" ] || [ "${draft}" != "false" ] || [ "${base_ref}" != "${DEFAULT_BRANCH}" ]; then
+              skipped=$((skipped + 1))
+              printf '| [#%s](%s) | skipped | Not an open, ready pull request against %s. |\n' "${pr_number}" "${url}" "${DEFAULT_BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
+              continue
+            fi
+
+            if [ -z "${head_sha}" ]; then
+              skipped=$((skipped + 1))
+              printf '| [#%s](%s) | skipped | Could not resolve the current PR head SHA. |\n' "${pr_number}" "${url}" >> "${GITHUB_STEP_SUMMARY}"
+              continue
+            fi
+
+            default_branch_sha="$(
+              gh api "repos/${GH_REPO}/git/ref/heads/${DEFAULT_BRANCH}" --jq '.object.sha'
+            )"
+            if [ -z "${base_sha}" ] || [ "${base_sha}" != "${default_branch_sha}" ]; then
+              # Commits Dependabot will not rebase over: anyone else's, unless marked.
+              foreign_commits="$(
+                gh pr view "${pr_number}" --json commits \
+                  --jq '[.commits[] | select(all(.authors[]; .login != "dependabot[bot]" and .login != "dependabot") and ((.messageHeadline + "\n" + .messageBody) | test("\\[(dependabot[ -]skip|skip[ -]dependabot)\\]"; "i") | not))] | length'
+              )"
+              if [ "${foreign_commits}" != "0" ]; then
+                skipped=$((skipped + 1))
+                printf '| [#%s](%s) | skipped | Has commits from someone other than Dependabot, so Dependabot will not rebase it; comment @dependabot recreate to rebuild it. |\n' "${pr_number}" "${url}" >> "${GITHUB_STEP_SUMMARY}"
+                continue
+              fi
+              # GitHub answers 201 with the merge commit, 204 when the branch already
+              # contains main, and 409 on a conflict, which Dependabot rebases itself.
+              if refresh_output="$(
+                gh api --method POST "repos/${GH_REPO}/merges" \
+                  -f base="${head_ref}" \
+                  -f head="${default_branch_sha}" \
+                  -f commit_message="Merge ${DEFAULT_BRANCH} into ${head_ref} [dependabot skip]" 2>&1
+              )"; then
+                if [ -n "${refresh_output}" ]; then
+                  updated=$((updated + 1))
+                  detail="Merged ${DEFAULT_BRANCH} into the branch; waiting for fresh validation."
+                  if [ -z "${AUTOMERGE_TOKEN:-}" ]; then
+                    if gh workflow run build-and-validate.yml --ref "${head_ref}"; then
+                      detail="${detail} Dispatched Build and Validate on the refreshed branch."
+                    else
+                      detail="${detail} Could not dispatch Build and Validate; the daily scan retries."
+                      echo "::warning::PR #${pr_number}: could not dispatch Build and Validate on ${head_ref}."
+                    fi
+                  fi
+                  printf '| [#%s](%s) | updated | %s |\n' "${pr_number}" "${url}" "$(escape_markdown "${detail}")" >> "${GITHUB_STEP_SUMMARY}"
+                else
+                  skipped=$((skipped + 1))
+                  printf '| [#%s](%s) | skipped | The branch already contains %s; waiting for its validation. |\n' "${pr_number}" "${url}" "${DEFAULT_BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
+                fi
+              elif [[ "${refresh_output}" == *"HTTP 409"* ]]; then
+                skipped=$((skipped + 1))
+                printf '| [#%s](%s) | conflict | Conflicts with %s; Dependabot rebases conflicting pull requests itself. |\n' "${pr_number}" "${url}" "${DEFAULT_BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
+              else
+                skipped=$((skipped + 1))
+                detail="Could not merge ${DEFAULT_BRANCH} into the stale branch: $(printf '%s' "${refresh_output}" | tail -n1)"
+                echo "::warning::PR #${pr_number}: ${detail}"
+                printf '| [#%s](%s) | skipped | %s |\n' "${pr_number}" "${url}" "$(escape_markdown "${detail}")" >> "${GITHUB_STEP_SUMMARY}"
+              fi
+              continue
+            fi
+
+            validation_url=''
+            if [ -n "${WORKFLOW_RUN_HEAD_SHA:-}" ]; then
+              if [ "${WORKFLOW_RUN_HEAD_SHA}" != "${head_sha}" ]; then
+                skipped=$((skipped + 1))
+                printf '| [#%s](%s) | skipped | The successful workflow run validated an older PR head. |\n' "${pr_number}" "${url}" >> "${GITHUB_STEP_SUMMARY}"
+                continue
+              fi
+              validation_url="${WORKFLOW_RUN_URL:-}"
+            else
+              validation_url="$(successful_validation_url "${head_sha}")"
+              if [ -z "${validation_url}" ]; then
+                skipped=$((skipped + 1))
+                printf '| [#%s](%s) | skipped | Build and Validate has not succeeded for the current PR head. |\n' "${pr_number}" "${url}" >> "${GITHUB_STEP_SUMMARY}"
+                continue
+              fi
+            fi
+
+            mergeable='UNKNOWN'
+            merge_state_status='UNKNOWN'
+            for _attempt in 1 2 3 4 5; do
+              merge_json="$(gh pr view "${pr_number}" --json mergeable,mergeStateStatus)"
+              mergeable="$(jq -r '.mergeable' <<<"${merge_json}")"
+              merge_state_status="$(jq -r '.mergeStateStatus' <<<"${merge_json}")"
+              if [ "${mergeable}" != "UNKNOWN" ] && [ "${merge_state_status}" != "UNKNOWN" ]; then
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "${mergeable}" != "MERGEABLE" ] || [ "${merge_state_status}" != "CLEAN" ]; then
+              skipped=$((skipped + 1))
+              detail="Merge state is ${merge_state_status} (${mergeable}); manual attention or fresh validation is required."
+              printf '| [#%s](%s) | skipped | %s |\n' "${pr_number}" "${url}" "$(escape_markdown "${detail}")" >> "${GITHUB_STEP_SUMMARY}"
+              continue
+            fi
+
+            merge_body="$(
+              printf '%s\n\n%s\n%s\n' \
+                'Automatically merged after Build and Validate completed successfully for this Dependabot pull request.' \
+                "Validated workflow: ${validation_url:-not available}" \
+                "Original pull request: ${url}"
+            )"
+
+            if merge_output="$(
+              gh pr merge \
+                --squash \
+                --delete-branch \
+                --match-head-commit "${head_sha}" \
+                --subject "${title} (#${pr_number})" \
+                --body "${merge_body}" \
+                "${pr_number}" 2>&1
+            )"; then
+              merged=$((merged + 1))
+              printf '| [#%s](%s) | merged | Squash-merged the exact validated head revision. |\n' "${pr_number}" "${url}" >> "${GITHUB_STEP_SUMMARY}"
+            else
+              skipped=$((skipped + 1))
+              detail="$(printf '%s' "${merge_output}" | tail -n1)"
+              printf '| [#%s](%s) | skipped | %s |\n' "${pr_number}" "${url}" "$(escape_markdown "${detail}")" >> "${GITHUB_STEP_SUMMARY}"
+            fi
+          done <<< "${prs}"
+
+          printf '\nMerged: %s\n\nUpdated for revalidation: %s\n\nSkipped: %s\n' "${merged}" "${updated}" "${skipped}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Report failed Dependabot update jobs
+        if: ${{ !cancelled() && github.event_name != 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Dependabot reports its own failures only in its job logs, which nobody reads.
+          # Scheduled runs can start hours after their cron time, so the window opens
+          # where the previous scheduled scan began, or two days ago before the first one.
+          since="$(
+            gh run list --workflow "${GITHUB_WORKFLOW}" --event schedule --limit 5 \
+              --json databaseId,createdAt \
+              --jq "[.[] | select(.databaseId != ${GITHUB_RUN_ID})][0].createdAt // empty"
+          )"
+          if [ -z "${since}" ]; then
+            since="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          fi
+          failures="$(
+            gh run list --event dynamic --created ">=${since}" --limit 100 \
+              --json name,conclusion,url \
+              --jq '.[] | select((.name | test(" - Update #[0-9]+$")) and .conclusion == "failure") | "- [\(.name)](\(.url))"'
+          )"
+          if [ -n "${failures}" ]; then
+            {
+              printf '## Failed Dependabot update jobs since %s\n\n' "${since}"
+              printf '%s\n' "${failures}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+            echo "::error::Dependabot update jobs failed since ${since}; open the job logs listed in the summary."
+            exit 1
+          fi
+          echo "No Dependabot update job failed since ${since}." >> "${GITHUB_STEP_SUMMARY}"
