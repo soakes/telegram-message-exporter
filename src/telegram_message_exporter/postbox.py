@@ -1,4 +1,4 @@
-"""Postbox parsing helpers for Telegram Desktop databases."""
+"""Postbox parsing helpers for Telegram for macOS databases."""
 
 # pylint: disable=too-many-lines
 
