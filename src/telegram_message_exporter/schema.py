@@ -99,7 +99,7 @@ class TelegramMediaActionType(enum.IntEnum):
     POLL_OPTION_DELETED = 64
 
     @classmethod
-    def safe(cls, raw_value: int) -> "TelegramMediaActionType":
+    def safe(cls, raw_value: int) -> TelegramMediaActionType:
         """Return a known action type without failing on newer Telegram values."""
         try:
             return cls(raw_value)

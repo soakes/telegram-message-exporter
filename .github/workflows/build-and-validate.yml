@@ -1,0 +1,72 @@
+name: Build and Validate
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.15 waits on sqlcipher3 and mmh3 4.1.0 publishing cp315 wheels.
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+          - "3.14"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install project and development tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+
+      - name: Check formatting
+        run: black --check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
+
+      - name: Run ruff
+        run: ruff check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
+
+      - name: Run pylint
+        run: pylint src/telegram_message_exporter telegram_exporter.py
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Build package
+        run: python -m build --outdir dist .
+
+      - name: Validate package metadata
+        run: python -m twine check --strict dist/*
+
+      - name: Smoke test CLI
+        run: |
+          telegram-exporter --version
+          telegram-exporter --help > /dev/null
+          ./telegram_exporter.py --version

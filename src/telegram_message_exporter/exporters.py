@@ -9,7 +9,6 @@ import shutil
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from .models import Attachment, Message
 from .utils import linkify_html, linkify_markdown
@@ -62,7 +61,12 @@ body {
 .blob-2 { background: #6366f1; top: 20px; right: -140px; }
 .blob-3 { background: #22c55e; bottom: -160px; left: 20%; }
 
-.container { position: relative; z-index: 1; padding: 22px 16px 44px; max-width: 1120px; }
+.container {
+  position: relative;
+  z-index: 1;
+  padding: 22px 16px 44px;
+  max-width: 1120px;
+}
 .glass {
   background: var(--glass);
   border: 1px solid var(--glass-border);
@@ -210,7 +214,12 @@ header.header-panel {
   color: #bae6fd;
 }
 .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
-a { color: var(--accent); text-decoration: none; word-break: break-word; overflow-wrap: anywhere; }
+a {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 a:hover { text-decoration: underline; }
 .back-top {
   position: fixed;
@@ -248,7 +257,7 @@ class HtmlStats:
 class RenderOptions:
     """Optional rendering preferences."""
 
-    peer_map: Optional[dict[int, str]] = None
+    peer_map: dict[int, str] | None = None
     me_name: str = "Me"
     show_direction: bool = False
 
@@ -325,9 +334,7 @@ def _safe_media_filename(value: str) -> str:
     return safe
 
 
-def resolve_speaker(
-    msg: Message, peer_map: Optional[dict[int, str]], me_name: str
-) -> str:
+def resolve_speaker(msg: Message, peer_map: dict[int, str] | None, me_name: str) -> str:
     """Resolve display name for a message."""
     if msg.outgoing is True:
         return me_name
@@ -340,9 +347,9 @@ def resolve_speaker(
 
 
 def _resolve_peer_name(
-    peer_id: Optional[int],
-    peer_map: Optional[dict[int, str]],
-) -> Optional[str]:
+    peer_id: int | None,
+    peer_map: dict[int, str] | None,
+) -> str | None:
     if peer_id is None or not peer_map:
         return None
     return peer_map.get(peer_id)
@@ -350,8 +357,8 @@ def _resolve_peer_name(
 
 def _forwarded_from(
     msg: Message,
-    peer_map: Optional[dict[int, str]],
-) -> Optional[str]:
+    peer_map: dict[int, str] | None,
+) -> str | None:
     info = msg.forward_info
     if info is None:
         return None
@@ -439,7 +446,7 @@ def render_markdown(  # pylint: disable=too-many-locals
     messages: list[Message],
     title: str,
     out_path: Path,
-    options: Optional[RenderOptions] = None,
+    options: RenderOptions | None = None,
 ) -> None:
     """Export messages to Markdown."""
     options = options or RenderOptions()
@@ -493,7 +500,7 @@ def render_markdown(  # pylint: disable=too-many-locals
 def render_csv(
     messages: list[Message],
     out_path: Path,
-    peer_map: Optional[dict[int, str]] = None,
+    peer_map: dict[int, str] | None = None,
     me_name: str = "Me",
 ) -> None:
     """Export messages to CSV."""
@@ -555,7 +562,7 @@ def _attachments_json(msg: Message) -> str:
     )
 
 
-def _forward_info_json(msg: Message, peer_map: Optional[dict[int, str]] = None) -> str:
+def _forward_info_json(msg: Message, peer_map: dict[int, str] | None = None) -> str:
     if msg.forward_info is None:
         return ""
     return json.dumps(
@@ -582,7 +589,7 @@ def render_html(
     messages: list[Message],
     title: str,
     out_path: Path,
-    peer_map: Optional[dict[int, str]] = None,
+    peer_map: dict[int, str] | None = None,
     me_name: str = "Me",
 ) -> None:
     """Export messages to a styled HTML transcript."""
@@ -666,7 +673,7 @@ def _render_toolbar(handle, day_entries: tuple[tuple[str, str], ...]) -> None:
 def _render_messages(
     handle,
     messages: list[Message],
-    peer_map: Optional[dict[int, str]],
+    peer_map: dict[int, str] | None,
     me_name: str,
 ) -> None:
     handle.write('<div class="chat-card glass">')

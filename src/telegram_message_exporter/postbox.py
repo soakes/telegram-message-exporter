@@ -8,9 +8,10 @@ import enum
 import io
 import sqlite3
 import struct
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from .hashing import murmur_hash, persistent_hash32
 from .models import Attachment, ForwardInfo, Message
@@ -172,7 +173,7 @@ class MessageIndex:
     timestamp: int
 
     @classmethod
-    def from_bytes(cls, payload: bytes) -> "MessageIndex":
+    def from_bytes(cls, payload: bytes) -> MessageIndex:
         """Deserialize message index bytes into a structured index."""
         reader = ByteReader(io.BytesIO(payload), endian=">")
         peer_id = reader.read_int64()
@@ -200,9 +201,9 @@ class MediaEntry:
     """Decoded value from the Postbox message-media table."""
 
     entry_type: MediaEntryType
-    media: Optional[Any] = None
-    message_index: Optional[MessageIndex] = None
-    reference_count: Optional[int] = None
+    media: Any | None = None
+    message_index: MessageIndex | None = None
+    reference_count: int | None = None
 
 
 class PostboxDecoder:
@@ -243,13 +244,13 @@ class PostboxDecoder:
         self.reader = ByteReader(io.BytesIO(data), endian="<")
         self.size = len(data)
 
-    def decode_root_object(self) -> Optional[Any]:
+    def decode_root_object(self) -> Any | None:
         """Decode the root object for the payload."""
         _, value = self.get(self.ValueType.OBJECT, "_")
         return value
 
     def get(
-        self, value_type: Optional["PostboxDecoder.ValueType"], key: str
+        self, value_type: PostboxDecoder.ValueType | None, key: str
     ) -> tuple[Any, Any]:
         """Fetch a typed value by key."""
         for entry_key, entry_type, entry_value in self.iter_kv():
@@ -263,7 +264,7 @@ class PostboxDecoder:
                 return entry_type, None
         return None, None
 
-    def iter_kv(self) -> Iterable[tuple[str, "PostboxDecoder.ValueType", Any]]:
+    def iter_kv(self) -> Iterable[tuple[str, PostboxDecoder.ValueType, Any]]:
         """Iterate over key/value records in this payload."""
         self.reader.buf.seek(0, io.SEEK_SET)
         while self.reader.buf.tell() < self.size:
@@ -271,7 +272,7 @@ class PostboxDecoder:
             value_type, value = self.read_value()
             yield key, value_type, value
 
-    def read_value(self) -> tuple["PostboxDecoder.ValueType", Any]:
+    def read_value(self) -> tuple[PostboxDecoder.ValueType, Any]:
         """Read a single value from the reader."""
         value_type = self.ValueType(self.reader.read_uint8())
         handler = {
@@ -398,7 +399,7 @@ for _type_name in (
         )
 
 
-def _decode_root_object_safe(payload: bytes) -> Optional[Any]:
+def _decode_root_object_safe(payload: bytes) -> Any | None:
     try:
         return PostboxDecoder(payload).decode_root_object()
     except (LookupError, TypeError, UnicodeDecodeError, ValueError, struct.error):
@@ -428,7 +429,7 @@ def read_media_entry(payload: bytes) -> MediaEntry:
     )
 
 
-def _media_id(media: Any) -> Optional[tuple[int, int]]:
+def _media_id(media: Any) -> tuple[int, int] | None:
     if not isinstance(media, PostboxObject):
         return None
     for field_name in ("file_id", "image_id", "webpage_id"):
@@ -450,7 +451,7 @@ def _resource_id(value: Any) -> Any:
 
 
 # pylint: disable=too-many-return-statements,too-many-branches
-def _resource_cache_key(resource: Any) -> Optional[str]:
+def _resource_cache_key(resource: Any) -> str | None:
     if not isinstance(resource, PostboxObject):
         return None
     fields = resource.fields
@@ -552,7 +553,7 @@ def _resource_cache_key(resource: Any) -> Optional[str]:
 
 def _file_attribute_data(
     attributes: Any,
-) -> tuple[Optional[str], bool, bool, Optional[int], Optional[int]]:
+) -> tuple[str | None, bool, bool, int | None, int | None]:
     filename = None
     is_voice = False
     is_sticker = False
@@ -614,7 +615,7 @@ def _file_resources(fields: dict[str, Any]) -> list[Any]:
 
 def _file_resource_keys(
     fields: dict[str, Any],
-) -> tuple[Optional[str], tuple[str, ...], Optional[str]]:
+) -> tuple[str | None, tuple[str, ...], str | None]:
     resources = _file_resources(fields)
     keys: list[str] = []
     source_path = None
@@ -730,11 +731,11 @@ class PostboxMediaResolver:  # pylint: disable=too-few-public-methods
         self.conn = conn
         self.media_table = media_table
         self.message_table = message_table
-        self.cache: dict[tuple[int, int], Optional[Any]] = {}
+        self.cache: dict[tuple[int, int], Any | None] = {}
 
     def resolve(  # pylint: disable=too-many-return-statements
         self, namespace: int, media_id: int
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """Resolve one media id to a decoded media object, if possible."""
         key = (namespace, media_id)
         if key in self.cache:
@@ -787,7 +788,7 @@ class PostboxMediaResolver:  # pylint: disable=too-few-public-methods
         return None
 
 
-def read_intermediate_fwd_info(reader: ByteReader) -> Optional[dict[str, Any]]:
+def read_intermediate_fwd_info(reader: ByteReader) -> dict[str, Any] | None:
     """Decode forward info section from a message payload."""
     info_flags = FwdInfoFlags(reader.read_int8())
     if info_flags == 0:
@@ -829,7 +830,7 @@ def read_intermediate_fwd_info(reader: ByteReader) -> Optional[dict[str, Any]]:
 
 def read_intermediate_message(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     payload: bytes,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Decode a Postbox message payload to a structured dict."""
     reader = ByteReader(io.BytesIO(payload))
     message_type = reader.read_int8()
@@ -926,11 +927,11 @@ def read_intermediate_message(  # pylint: disable=too-many-locals,too-many-branc
 
 def iter_postbox_messages(  # pylint: disable=too-many-locals,too-many-branches,too-many-arguments,too-many-positional-arguments
     rows: Iterable[tuple[bytes, bytes]],
-    peer_id: Optional[int] = None,
-    start_ts: Optional[int] = None,
-    end_ts: Optional[int] = None,
-    limit: Optional[int] = None,
-    media_resolver: Optional[PostboxMediaResolver] = None,
+    peer_id: int | None = None,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+    limit: int | None = None,
+    media_resolver: PostboxMediaResolver | None = None,
 ) -> list[Message]:
     """Iterate Postbox message rows and build normalized messages."""
     messages: list[Message] = []
@@ -1006,7 +1007,7 @@ def iter_postbox_messages(  # pylint: disable=too-many-locals,too-many-branches,
     return messages
 
 
-def parse_peer_key(raw_key: Any) -> Optional[int]:
+def parse_peer_key(raw_key: Any) -> int | None:
     """Parse peer key into an integer peer id."""
     if isinstance(raw_key, int):
         return raw_key
@@ -1015,7 +1016,7 @@ def parse_peer_key(raw_key: Any) -> Optional[int]:
     return None
 
 
-def peer_display(peer: Any) -> Optional[str]:
+def peer_display(peer: Any) -> str | None:
     """Build a display name from a peer payload."""
     if not isinstance(peer, dict):
         return None
@@ -1030,7 +1031,7 @@ def peer_display(peer: Any) -> Optional[str]:
 
 def list_peers_postbox(
     rows: Iterable[tuple[bytes, bytes]],
-    term: Optional[str],
+    term: str | None,
 ) -> list[tuple[str, int, str]]:
     """List peer ids and names from Postbox t2 rows."""
     results: list[tuple[str, int, str]] = []

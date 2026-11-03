@@ -6,8 +6,8 @@ import sqlite3
 import struct
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 from .models import Message
 from .schema import PostboxTable
@@ -25,7 +25,7 @@ def table_columns(conn: sqlite3.Connection, table: str) -> list[tuple]:
     return conn.execute(f"PRAGMA table_info({table})").fetchall()
 
 
-def detect_column(cols: list[tuple], names: Iterable[str]) -> Optional[str]:
+def detect_column(cols: list[tuple], names: Iterable[str]) -> str | None:
     """Detect the first column matching any of the given names."""
     name_set = {name.lower() for name in names}
     for col in cols:
@@ -122,7 +122,7 @@ def extract_tl_strings(blob: bytes) -> list[str]:
     return strings
 
 
-def extract_message_text(value: object) -> Optional[str]:
+def extract_message_text(value: object) -> str | None:
     """Extract likely message text from a DB value."""
     if value is None:
         return None
@@ -141,13 +141,13 @@ def extract_message_text(value: object) -> Optional[str]:
 class FetchOptions:
     """Filtering options when retrieving messages."""
 
-    peer_id: Optional[int] = None
-    limit: Optional[int] = None
-    start_ts: Optional[int] = None
-    end_ts: Optional[int] = None
+    peer_id: int | None = None
+    limit: int | None = None
+    start_ts: int | None = None
+    end_ts: int | None = None
 
 
-def _prefix_successor(prefix: bytes) -> Optional[bytes]:
+def _prefix_successor(prefix: bytes) -> bytes | None:
     """Return the smallest byte string greater than every key with this prefix."""
     successor = bytearray(prefix)
     for index in range(len(successor) - 1, -1, -1):
@@ -165,7 +165,7 @@ def _postbox_key_prefix(peer_id: int) -> bytes:
 def _postbox_range_query(
     table: str,
     lower: bytes,
-    upper: Optional[bytes],
+    upper: bytes | None,
 ) -> tuple[str, tuple[bytes, ...]]:
     query = f"SELECT key, value FROM {table} WHERE key >= ?"
     params = (lower,)
@@ -185,10 +185,7 @@ def _debug_postbox_query(
     print(f"[query] {label}", file=sys.stderr)
     print(f"[query] SQL: {query}", file=sys.stderr)
     for index, param in enumerate(params, start=1):
-        if isinstance(param, bytes):
-            display = f"X'{param.hex()}'"
-        else:
-            display = repr(param)
+        display = f"X'{param.hex()}'" if isinstance(param, bytes) else repr(param)
         print(f"[query] param {index}: {display}", file=sys.stderr)
     for plan_row in conn.execute(f"EXPLAIN QUERY PLAN {query}", params):
         print(f"[query] plan: {plan_row[3]}", file=sys.stderr)
@@ -277,11 +274,11 @@ def iter_postbox_peer_rows(
 class MessageColumns:
     """Resolved column names for a message table."""
 
-    date: Optional[str]
-    text: Optional[str]
-    blob: Optional[str]
-    peer: Optional[str]
-    outgoing: Optional[str]
+    date: str | None
+    text: str | None
+    blob: str | None
+    peer: str | None
+    outgoing: str | None
     all_columns: tuple[str, ...]
 
 
@@ -335,16 +332,12 @@ def row_in_range(ts, options: FetchOptions) -> bool:
         ts is None or int(ts.timestamp()) < options.start_ts
     ):
         return False
-    if options.end_ts is not None and (
-        ts is None or int(ts.timestamp()) > options.end_ts
-    ):
-        return False
-    return True
+    return options.end_ts is None or (
+        ts is not None and int(ts.timestamp()) <= options.end_ts
+    )
 
 
-def parse_outgoing(
-    row_map: dict[str, object], columns: MessageColumns
-) -> Optional[bool]:
+def parse_outgoing(row_map: dict[str, object], columns: MessageColumns) -> bool | None:
     """Parse outgoing flag from a row."""
     if not columns.outgoing:
         return None
@@ -357,7 +350,7 @@ def parse_outgoing(
         return None
 
 
-def parse_peer_id(row_map: dict[str, object], columns: MessageColumns) -> Optional[int]:
+def parse_peer_id(row_map: dict[str, object], columns: MessageColumns) -> int | None:
     """Parse peer ID from a row."""
     if not columns.peer:
         return None
@@ -370,7 +363,7 @@ def parse_peer_id(row_map: dict[str, object], columns: MessageColumns) -> Option
         return None
 
 
-def extract_text(row_map: dict[str, object], columns: MessageColumns) -> Optional[str]:
+def extract_text(row_map: dict[str, object], columns: MessageColumns) -> str | None:
     """Extract message text from a row."""
     text = None
     if columns.text:
@@ -442,7 +435,7 @@ def detect_peer_tables(conn: sqlite3.Connection) -> list[PeerTableInfo]:
     return infos
 
 
-def build_peer_query(info: PeerTableInfo, term: Optional[str]) -> tuple[str, list[str]]:
+def build_peer_query(info: PeerTableInfo, term: str | None) -> tuple[str, list[str]]:
     """Build the SQL query for a peer search."""
     select_cols = [info.id_column, *info.name_columns]
     query = f"SELECT {', '.join(select_cols)} FROM {info.table}"
@@ -454,7 +447,7 @@ def build_peer_query(info: PeerTableInfo, term: Optional[str]) -> tuple[str, lis
     return query, params
 
 
-def build_peer_display(values: Iterable[object]) -> Optional[str]:
+def build_peer_display(values: Iterable[object]) -> str | None:
     """Build a display name from row values."""
     name_parts = [str(value) for value in values if value]
     if not name_parts:
@@ -465,7 +458,7 @@ def build_peer_display(values: Iterable[object]) -> Optional[str]:
 def query_peer_table(
     conn: sqlite3.Connection,
     info: PeerTableInfo,
-    term: Optional[str],
+    term: str | None,
 ) -> list[tuple[str, int, str]]:
     """Query a single table for peer matches."""
     query, params = build_peer_query(info, term)
@@ -487,7 +480,7 @@ def query_peer_table(
 
 
 def search_peers(
-    conn: sqlite3.Connection, term: Optional[str]
+    conn: sqlite3.Connection, term: str | None
 ) -> list[tuple[str, int, str]]:
     """Search for peer names in non-Postbox tables."""
     results: list[tuple[str, int, str]] = []

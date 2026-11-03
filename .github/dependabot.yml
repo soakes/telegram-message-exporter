@@ -1,14 +1,41 @@
 version: 2
+
+# Checked every day, weekends included, through a cron schedule: Dependabot's `daily`
+# interval runs Monday to Friday only. Dependabot Merge merges each pull request once
+# Build and Validate passes on it.
 updates:
-  - package-ecosystem: "pip"
+  - package-ecosystem: pip
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: cron
+      cronjob: "0 4 * * *"
+      timezone: Europe/London
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      python-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
     ignore:
-      - dependency-name: "mmh3"
-  - package-ecosystem: "github-actions"
+      # Postbox key hashing is built and tested against mmh3 4.1.0; move it deliberately.
+      - dependency-name: mmh3
+
+  - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: cron
+      cronjob: "10 4 * * *"
+      timezone: Europe/London
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -12,29 +11,29 @@ class Attachment:  # pylint: disable=too-many-instance-attributes
     """Normalized media attachment associated with a message."""
 
     kind: str
-    filename: Optional[str] = None
-    mime_type: Optional[str] = None
-    cache_key: Optional[str] = None
+    filename: str | None = None
+    mime_type: str | None = None
+    cache_key: str | None = None
     alternate_cache_keys: tuple[str, ...] = ()
-    source_path: Optional[str] = None
-    exported_path: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    url: Optional[str] = None
+    source_path: str | None = None
+    exported_path: str | None = None
+    width: int | None = None
+    height: int | None = None
+    url: str | None = None
 
 
 @dataclass(frozen=True)
 class ForwardInfo:  # pylint: disable=too-many-instance-attributes
     """Original-message metadata attached to a forwarded message."""
 
-    author_id: Optional[int]
-    source_id: Optional[int]
-    source_message_peer_id: Optional[int]
-    source_message_namespace: Optional[int]
-    source_message_id: Optional[int]
-    date: Optional[datetime]
-    author_signature: Optional[str]
-    psa_type: Optional[str]
+    author_id: int | None
+    source_id: int | None
+    source_message_peer_id: int | None
+    source_message_namespace: int | None
+    source_message_id: int | None
+    date: datetime | None
+    author_signature: str | None
+    psa_type: str | None
     is_imported: bool = False
 
 
@@ -42,13 +41,13 @@ class ForwardInfo:  # pylint: disable=too-many-instance-attributes
 class Message:
     """Normalized message representation used by exporters."""
 
-    timestamp: Optional[datetime]
+    timestamp: datetime | None
     text: str
-    outgoing: Optional[bool]
-    peer_id: Optional[int]
-    author_id: Optional[int]
+    outgoing: bool | None
+    peer_id: int | None
+    author_id: int | None
     attachments: tuple[Attachment, ...] = ()
-    forward_info: Optional[ForwardInfo] = None
+    forward_info: ForwardInfo | None = None
 
     def speaker_hint(self) -> str:
         """Return a concise label for direction when no names are available."""
