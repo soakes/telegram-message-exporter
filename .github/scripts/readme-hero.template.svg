@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1200 400" width="1200" height="400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">telegram-message-exporter - offline chat recovery for Telegram for macOS</title>
-  <desc id="desc">A terminal session runs telegram-exporter discover, decrypt, list-peers and export, ending with 418 messages exported to an HTML transcript.</desc>
+  <desc id="desc">A terminal session runs telegram-exporter discover, decrypt and export, ending with 418 messages exported to an HTML transcript.</desc>
 
   <defs>
     <style>
@@ -94,9 +94,9 @@
     <use href="#i-shield" x="48" y="318" width="17" height="17" style="color:#22D3EE" />
     <text x="72" y="331">Offline only</text>
     <use href="#i-lock" x="176" y="318" width="17" height="17" style="color:#A78BFA" />
-    <text x="200" y="331">Passcode Lock</text>
-    <use href="#i-image" x="318" y="318" width="17" height="17" style="color:#34D399" />
-    <text x="342" y="331">Cached media</text>
+    <text x="200" y="331">Passcode support</text>
+    <use href="#i-image" x="338" y="318" width="17" height="17" style="color:#34D399" />
+    <text x="362" y="331">Cached media</text>
   </g>
 
   <!-- Right: terminal -->

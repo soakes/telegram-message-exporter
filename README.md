@@ -37,8 +37,23 @@ and none of them will work here.
 
 If you are trying to save a chat that was deleted recently, move quickly. Quit
 Telegram and take the Mac offline so the app has less chance to sync the
-deletion or overwrite its cache. Then copy the key and database somewhere else
-and work from the copy.
+deletion or overwrite its cache.
+
+Then copy Telegram's whole `stable` folder and work from the copy. Telegram
+keeps its database in SQLite's WAL mode, so the newest changes can sit in
+`db_sqlite-wal` next to `db_sqlite`, and copying the database file on its own
+can leave them behind. The folder includes the media cache, so it can be large.
+
+```bash
+STABLE="$HOME/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable"
+mkdir -p recovery
+cp -Rp "$STABLE" recovery/telegram
+```
+
+If macOS asks whether your terminal may access data from other apps, allow it.
+If `cp` fails with `Operation not permitted` instead, give the terminal app Full
+Disk Access in System Settings > Privacy & Security > Full Disk Access, restart
+it, and run the copy again.
 
 The decrypted database and every export contain your messages in plain text.
 Keep them somewhere private and delete them when you are finished.
@@ -58,20 +73,46 @@ If `pip` fails while building `sqlcipher3`, install SQLCipher with
 
 ## Find the Telegram files
 
-```bash
-telegram-exporter discover
+`discover` prints the key file and, for each account, the database and media
+cache it finds. It then prints ready-to-run `decrypt` and `export` commands for
+the first account, so you rarely need to type a path yourself. Point `--root`
+at your copy, or leave it out to look in Telegram's own folder:
+
+```console
+$ telegram-exporter discover --root recovery/telegram
+Telegram root: recovery/telegram
+Encrypted key: recovery/telegram/.tempkeyEncrypted
+Raw key: not found
+
+Account 1: account-123456
+  Messages DB: recovery/telegram/account-123456/postbox/db/db_sqlite
+  Media dir: recovery/telegram/account-123456/postbox/media
+
+Suggested decrypt command:
+  telegram-exporter decrypt \
+    --key recovery/telegram/.tempkeyEncrypted \
+    --db recovery/telegram/account-123456/postbox/db/db_sqlite \
+    --out recovery/plaintext.db
+
+Suggested HTML export with cached media:
+  telegram-exporter export \
+    --db recovery/plaintext.db \
+    --media-dir recovery/telegram/account-123456/postbox/media \
+    --format html \
+    --out recovery/chat.html
 ```
 
-`discover` looks in the default Telegram location and prints the key file and,
-for each account, the database and media cache it finds. Pass `--root` to look
-at a copied folder instead. The default layout is:
+The suggested export covers every chat. To export one, add a peer as described
+under [Export a chat](#export-a-chat). The layout `discover` looks for is:
 
 ```text
 ~/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable/
 ├── .tempkeyEncrypted
 └── account-<id>/
     └── postbox/
-        ├── db/db_sqlite
+        ├── db/
+        │   ├── db_sqlite
+        │   └── db_sqlite-wal
         └── media/
 ```
 
@@ -81,16 +122,15 @@ Each `account-*` folder is a separate Telegram account with its own database.
 ## Decrypt the database
 
 ```bash
-STABLE="$HOME/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable"
-
 telegram-exporter decrypt \
-  --key "$STABLE/.tempkeyEncrypted" \
-  --db "$STABLE/account-123456/postbox/db/db_sqlite" \
+  --key recovery/telegram/.tempkeyEncrypted \
+  --db recovery/telegram/account-123456/postbox/db/db_sqlite \
   --out recovery/plaintext.db
 ```
 
 This writes an ordinary SQLite copy to `recovery/plaintext.db`. Every other
-command reads from that copy.
+command reads from that copy. `decrypt` itself works on a temporary copy of
+`db_sqlite` and its `-wal` file, so the folder you point it at is never changed.
 
 If you use Telegram's Passcode Lock, the passcode is part of the key. Pass it
 with `--passcode`, or set `TG_LOCAL_PASSCODE` so it stays out of your shell
@@ -119,7 +159,7 @@ telegram-exporter export \
   --db recovery/plaintext.db \
   --peer-id 123456789 \
   --format html \
-  --media-dir "$STABLE/account-123456/postbox/media" \
+  --media-dir recovery/telegram/account-123456/postbox/media \
   --out recovery/alex.html
 ```
 
@@ -162,15 +202,15 @@ Outgoing messages are labelled `Me` unless you set `--me-name`.
 | --- | --- |
 | `Failed to decrypt database` or `file is not a database` | The key and database come from different places, or Passcode Lock is on and no passcode was given |
 | `Key file not found` / `Database file not found` | A wrong path, often an unquoted space in `Group Containers` |
+| `Permission denied` or `Operation not permitted` | macOS is blocking the terminal from reading Telegram's data; give it Full Disk Access in System Settings > Privacy & Security, then restart it |
 | `No peer records found` | The database probably isn't from the native macOS app; run `diagnose` and check |
 | `No messages found with the current filters` | Drop the date filters and check the peer ID |
 | `sqlcipher3` fails to install | Install SQLCipher with Homebrew and reinstall in a fresh virtual environment |
 
 `--debug` on `decrypt` shows whether the key file parsed and which key and
-SQLCipher profile worked. On `export` it
-prints the SQL, key ranges and query plans to stderr. `diagnose --db
-recovery/plaintext.db` dumps the table layout, which helps if Telegram has
-changed its storage format.
+SQLCipher profile worked. On `export` it prints the SQL, key ranges and query
+plans to stderr. `diagnose --db recovery/plaintext.db` dumps the table layout,
+which helps if Telegram has changed its storage format.
 
 This tool only reads what is still in the local cache. It can't bring back
 messages the app has already discarded, it can't get past a passcode you don't
