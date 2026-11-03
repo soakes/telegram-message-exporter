@@ -1,0 +1,118 @@
+<svg viewBox="0 0 1200 400" width="1200" height="400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">telegram-message-exporter - offline chat recovery for Telegram for macOS</title>
+  <desc id="desc">A terminal session runs telegram-exporter discover, decrypt, list-peers and export, ending with 418 messages exported to an HTML transcript.</desc>
+
+  <defs>
+    <style>
+      /* Inter and JetBrains Mono, SIL Open Font License 1.1, subset to the glyphs used here. */
+      __FONT_FACES__
+      .sans{font-family:'Hero Sans',-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;}
+      .mono{font-family:'Hero Mono','SF Mono',Menlo,Consolas,monospace;}
+
+      /* The session types itself out on a 16 s loop. Without animation it rests complete. */
+      __SESSION_CSS__
+      .halo{animation:halo 6s ease-in-out infinite;}
+      @keyframes halo{0%,100%{opacity:0.12}50%{opacity:0.2}}
+      @media (prefers-reduced-motion: reduce){
+        *{animation:none !important;}
+      }
+    </style>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070C18" />
+      <stop offset="1" stop-color="#0A1020" />
+    </linearGradient>
+    <radialGradient id="glowBlue" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#2563EB" stop-opacity="0.5" />
+      <stop offset="1" stop-color="#2563EB" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glowViolet" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7C3AED" stop-opacity="0.4" />
+      <stop offset="1" stop-color="#7C3AED" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="titleGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38BDF8" />
+      <stop offset="0.55" stop-color="#818CF8" />
+      <stop offset="1" stop-color="#C084FC" />
+    </linearGradient>
+    <linearGradient id="ruleGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22D3EE" />
+      <stop offset="0.5" stop-color="#818CF8" />
+      <stop offset="1" stop-color="#F59E0B" />
+    </linearGradient>
+    <linearGradient id="waveGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1D4ED8" />
+      <stop offset="0.5" stop-color="#5B21B6" />
+      <stop offset="1" stop-color="#0E7490" />
+    </linearGradient>
+    <linearGradient id="termSheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.035" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M28 0H0V28" fill="none" stroke="#FFFFFF" stroke-width="0.6" />
+    </pattern>
+    <filter id="blur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" />
+    </filter>
+    <clipPath id="frame"><rect x="1" y="1" width="1198" height="398" rx="20" /></clipPath>
+    <clipPath id="term"><rect x="549" y="65" width="610" height="304" /></clipPath>
+
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 21.5s8-3.8 8-10V5.2L12 2.5 4 5.2v6.3c0 6.2 8 10 8 10z" />
+      <path d="M8.8 12l2.2 2.2 4.4-4.4" />
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4.5" y="10.5" width="15" height="11" rx="2.5" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+    </symbol>
+    <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2.5" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="M21 15l-5-5L5 21" />
+    </symbol>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="400" fill="url(#bg)" />
+    <rect width="1200" height="400" fill="url(#grid)" opacity="0.04" />
+    <ellipse cx="140" cy="40" rx="420" ry="300" fill="url(#glowBlue)" />
+    <ellipse cx="1000" cy="380" rx="460" ry="280" fill="url(#glowViolet)" opacity="0.55" />
+    <path d="M0 338C180 300 340 382 580 356S960 300 1200 336V400H0Z" fill="url(#waveGrad)" opacity="0.2" />
+    <path d="M0 366C220 336 420 398 660 378S1010 342 1200 368V400H0Z" fill="url(#waveGrad)" opacity="0.16" />
+  </g>
+  <rect x="1" y="1" width="1198" height="398" rx="20" fill="none" stroke="#1C2742" stroke-width="1.5" />
+
+  <!-- Left: identity -->
+  <rect x="48" y="40" width="208" height="28" rx="14" fill="#0B2A3A" stroke="#1C6E8C" stroke-width="1.2" />
+  <text class="sans" x="152" y="58.5" text-anchor="middle" font-size="11.5" font-weight="800" letter-spacing="1.6" fill="#DDF6FF">OFFLINE CHAT RECOVERY</text>
+  <text class="sans" x="45" y="134" font-size="56" font-weight="800" letter-spacing="-1.6" fill="#F5F8FF">telegram</text>
+  <text class="sans" x="45" y="194" font-size="56" font-weight="800" letter-spacing="-1.6" fill="url(#titleGrad)" textLength="452" lengthAdjust="spacingAndGlyphs">message-exporter</text>
+  <text class="sans" x="48" y="244" font-size="21" font-weight="700" letter-spacing="-0.2" fill="#F1F5FF">Recover chats from Telegram for macOS</text>
+  <text class="sans" x="48" y="271" font-size="15" fill="#94A3B8">Decrypt the local cache and export HTML, Markdown or CSV.</text>
+  <rect x="48" y="292" width="450" height="3" rx="1.5" fill="url(#ruleGrad)" />
+  <g class="sans" font-size="12.5" font-weight="600" fill="#C9D3E4">
+    <use href="#i-shield" x="48" y="318" width="17" height="17" style="color:#22D3EE" />
+    <text x="72" y="331">Offline only</text>
+    <use href="#i-lock" x="176" y="318" width="17" height="17" style="color:#A78BFA" />
+    <text x="200" y="331">Passcode Lock</text>
+    <use href="#i-image" x="318" y="318" width="17" height="17" style="color:#34D399" />
+    <text x="342" y="331">Cached media</text>
+  </g>
+
+  <!-- Right: terminal -->
+  <rect class="halo" x="560" y="44" width="590" height="320" rx="14" fill="#7C3AED" opacity="0.14" filter="url(#blur)" />
+  <rect x="548" y="30" width="612" height="340" rx="14" fill="#090E1A" stroke="#24324F" stroke-width="1.3" />
+  <path d="M548 64V44a14 14 0 0 1 14-14h584a14 14 0 0 1 14 14v20z" fill="#0F1729" />
+  <path d="M548 64V44a14 14 0 0 1 14-14h584a14 14 0 0 1 14 14v20z" fill="url(#termSheen)" />
+  <line x1="548" y1="64" x2="1160" y2="64" stroke="#1E2A44" stroke-width="1" />
+  <circle cx="569" cy="47" r="5.5" fill="#FF5F57" />
+  <circle cx="586" cy="47" r="5.5" fill="#FEBC2E" />
+  <circle cx="603" cy="47" r="5.5" fill="#28C840" />
+  <text class="mono" x="854" y="51.5" text-anchor="middle" font-size="11.5" fill="#7C89A6">~/recovery — zsh</text>
+
+  <g clip-path="url(#term)">
+    <g class="screen">
+      __SESSION__
+    </g>
+  </g>
+</svg>

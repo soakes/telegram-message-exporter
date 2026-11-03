@@ -49,10 +49,10 @@ jobs:
           python -m pip install -e '.[dev]'
 
       - name: Check formatting
-        run: black --check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
+        run: black --check src/telegram_message_exporter tests telegram_exporter.py .github/scripts
 
       - name: Run ruff
-        run: ruff check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
+        run: ruff check src/telegram_message_exporter tests telegram_exporter.py .github/scripts
 
       - name: Run pylint
         run: pylint src/telegram_message_exporter telegram_exporter.py
