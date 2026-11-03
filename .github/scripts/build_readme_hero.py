@@ -26,13 +26,17 @@ USER_AGENT = (
 )
 
 # Terminal geometry. JetBrains Mono advances exactly 0.6 em per character.
-FONT_SIZE = 11.5
+FONT_SIZE = 13.0
 CHAR_W = FONT_SIZE * 0.6
-LINE_H = 16.5
-GAP = 6
+LINE_H = 21.0
+GAP = 10
 X0 = 570.0
 PROMPT_W = 2 * CHAR_W
-Y0 = 92.0
+Y0 = 106.0
+# The typing cover and cursor sit relative to the baseline, scaled to the font.
+ASCENT = FONT_SIZE * 1.05
+CURSOR_H = FONT_SIZE * 1.17
+CHEVRON = FONT_SIZE * 0.365
 TYPING_CPS = 52.0
 LOOP_S = 16.0
 TERMINAL_BG = "#090E1A"
@@ -46,7 +50,6 @@ BRIGHT = "#E2E8F0"
 STEP = {
     "discover": "#22D3EE",
     "decrypt": "#34D399",
-    "list-peers": "#A78BFA",
     "export": "#F59E0B",
 }
 
@@ -54,7 +57,8 @@ Segment = tuple[str, str, bool]
 
 # (kind, segments, gap before). "cmd" lines get a prompt and are typed, "cont"
 # lines are typed continuations, "out" lines appear as printed output. Output
-# text matches what telegram-exporter prints; paths are shortened to fit.
+# text matches what telegram-exporter prints; paths are shortened to fit, and
+# $KEY and $DB stand for the key and database paths that discover prints.
 SESSION: list[tuple[str, list[Segment], float]] = [
     (
         "cmd",
@@ -71,51 +75,36 @@ SESSION: list[tuple[str, list[Segment], float]] = [
     ),
     ("out", [("Account 1: ", DIM, False), ("account-123456", OUT, False)], 0),
     (
+        "out",
+        [
+            ("  Messages DB: ", DIM, False),
+            ("…/account-123456/postbox/db/db_sqlite", OUT, False),
+        ],
+        0,
+    ),
+    (
+        "out",
+        [
+            ("  Media dir: ", DIM, False),
+            ("…/account-123456/postbox/media", OUT, False),
+        ],
+        0,
+    ),
+    (
         "cmd",
         [
             ("telegram-exporter", BIN, True),
             (" decrypt", STEP["decrypt"], True),
             (" --key ", FLAG, False),
-            ('"$STABLE/.tempkeyEncrypted"', ARG, False),
-            (" \\", FLAG, False),
-        ],
-        GAP,
-    ),
-    (
-        "cont",
-        [
-            ("  --db ", FLAG, False),
-            ('"$STABLE/account-123456/postbox/db/db_sqlite"', ARG, False),
-            (" \\", FLAG, False),
-        ],
-        0,
-    ),
-    ("cont", [("  --out ", FLAG, False), ("recovery/plaintext.db", ARG, False)], 0),
-    (
-        "out",
-        [("Decrypted DB written to recovery/plaintext.db (48.21 MB)", BRIGHT, False)],
-        0,
-    ),
-    (
-        "cmd",
-        [
-            ("telegram-exporter", BIN, True),
-            (" list-peers", STEP["list-peers"], True),
+            ('"$KEY"', ARG, False),
             (" --db ", FLAG, False),
-            ("recovery/plaintext.db", ARG, False),
-            (" --search ", FLAG, False),
-            ("Alex", ARG, False),
+            ('"$DB"', ARG, False),
         ],
         GAP,
     ),
-    ("out", [("Possible peers:", DIM, False)], 0),
     (
         "out",
-        [
-            ("  123456789", "#FBBF24", False),
-            ("  Alex Example", BRIGHT, False),
-            ("  (table=t2)", "#56627C", False),
-        ],
+        [("Decrypted DB written to plaintext.db (48.21 MB)", BRIGHT, False)],
         0,
     ),
     (
@@ -124,24 +113,15 @@ SESSION: list[tuple[str, list[Segment], float]] = [
             ("telegram-exporter", BIN, True),
             (" export", STEP["export"], True),
             (" --db ", FLAG, False),
-            ("recovery/plaintext.db", ARG, False),
-            (" --peer-id ", FLAG, False),
-            ("123456789", ARG, False),
-            (" \\", FLAG, False),
+            ("plaintext.db", ARG, False),
+            (" --contact ", FLAG, False),
+            ("Alex", ARG, False),
+            (" --format ", FLAG, False),
+            ("html", ARG, False),
         ],
         GAP,
     ),
-    (
-        "cont",
-        [
-            ("  --format ", FLAG, False),
-            ("html", ARG, False),
-            (" --out ", FLAG, False),
-            ("recovery/alex.html", ARG, False),
-        ],
-        0,
-    ),
-    ("out", [("Exported 418 messages to recovery/alex.html", BRIGHT, False)], 0),
+    ("out", [("Exported 418 messages to chat_export.html", BRIGHT, False)], 0),
 ]
 
 
@@ -167,7 +147,8 @@ def chevron(x: float, y: float, cls: str = "") -> str:
     # Drawn, so the prompt never depends on a font having U+276F.
     attr = f' class="{cls}"' if cls else ""
     return (
-        f'<path{attr} d="M{x + 0.5:.2f} {y - 8.4:.2f}l4.2 4.2-4.2 4.2" fill="none" '
+        f'<path{attr} d="M{x + 0.5:.2f} {y - 2 * CHEVRON:.2f}'
+        f'l{CHEVRON:.2f} {CHEVRON:.2f}-{CHEVRON:.2f} {CHEVRON:.2f}" fill="none" '
         'stroke="#34D399" stroke-width="1.9" stroke-linecap="round" '
         'stroke-linejoin="round" />'
     )
@@ -205,10 +186,10 @@ def typed(index: int, x: float, y: float, chars: int, start: float) -> tuple[str
         f"100%{{opacity:0;transform:{shift}}}}}",
     ]
     elements = [
-        f'<rect class="cv{index}" x="{x:.2f}" y="{y - 12:.2f}" '
+        f'<rect class="cv{index}" x="{x:.2f}" y="{y - ASCENT:.2f}" '
         f'width="{width + CHAR_W:.2f}" height="{LINE_H:.2f}" fill="{TERMINAL_BG}" />',
-        f'<rect class="cu{index}" x="{x:.2f}" y="{y - 10.5:.2f}" '
-        f'width="{CHAR_W:.2f}" height="13.5" rx="1" fill="{BRIGHT}" '
+        f'<rect class="cu{index}" x="{x:.2f}" y="{y - CURSOR_H + 3:.2f}" '
+        f'width="{CHAR_W:.2f}" height="{CURSOR_H:.2f}" rx="1" fill="{BRIGHT}" '
         'fill-opacity="0.85" />',
     ]
     return "".join(css), "".join(elements)
@@ -257,8 +238,8 @@ def build_session() -> tuple[str, str]:
     )
     elements.append(
         f'<g class="fin">{chevron(X0, y)}<rect class="blink" x="{X0 + PROMPT_W:.2f}" '
-        f'y="{y - 10.5:.2f}" width="{CHAR_W:.2f}" height="13.5" rx="1" '
-        f'fill="{BRIGHT}" fill-opacity="0.85" /></g>'
+        f'y="{y - CURSOR_H + 3:.2f}" width="{CHAR_W:.2f}" '
+        f'height="{CURSOR_H:.2f}" rx="1" fill="{BRIGHT}" fill-opacity="0.85" /></g>'
     )
     return "\n      ".join(css), "\n      ".join(elements)
 
@@ -271,24 +252,23 @@ def fetch(url: str) -> bytes:
 
 def font_faces(svg: str) -> str:
     """Embed one subset per font family, covering the characters in the SVG."""
-    chars: dict[str, set[str]] = {"sans": set(), "mono": set()}
-    for cls, body in re.findall(
-        r'<text class="(sans|mono)[^"]*"[^>]*>(.*?)</text>', svg, re.S
-    ):
-        plain = re.sub(r"<[^>]+>", "", body)
-        for entity, char in (("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
-            plain = plain.replace(entity, char)
-        chars[cls].update(plain)
+    # Every visible string goes into both subsets. Text inside a <g class="sans">
+    # has no class of its own, so matching on classes left glyphs to a fallback.
+    body = re.sub(r"<(style|title|desc)\b.*?</\1>", "", svg, flags=re.S)
+    plain = "".join(re.findall(r">([^<]*)<", body))
+    for entity, char in (("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
+        plain = plain.replace(entity, char)
+    used = "".join(sorted(set(plain) - set("\n\t\r")))
 
     faces = []
-    for family, local, weights, cls in (
-        ("Inter", "Hero Sans", "400;600;700;800", "sans"),
-        ("JetBrains Mono", "Hero Mono", "400;700", "mono"),
+    for family, local, weights in (
+        ("Inter", "Hero Sans", "400;600;700;800"),
+        ("JetBrains Mono", "Hero Mono", "400;700"),
     ):
         query = urllib.parse.urlencode(
             {
                 "family": f"{family}:wght@{weights}",
-                "text": "".join(sorted(chars[cls])),
+                "text": used,
                 "display": "block",
             }
         )
