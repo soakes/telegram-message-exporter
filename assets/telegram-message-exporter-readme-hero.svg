@@ -1,0 +1,172 @@
+<svg viewBox="0 0 1200 400" width="1200" height="400" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">telegram-message-exporter - offline chat recovery for Telegram for macOS</title>
+  <desc id="desc">A dark README hero showing telegram-message-exporter turning the encrypted Telegram for macOS cache into HTML, Markdown or CSV transcripts, entirely offline.</desc>
+
+  <defs>
+    <style>
+      .sans{font-family:'Inter','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;}
+      .mono{font-family:'SFMono-Regular','SF Mono','JetBrains Mono','Fira Code','DejaVu Sans Mono',Menlo,Consolas,monospace;}
+      .flow{stroke-dasharray:5 9;animation:flow 2.7s linear infinite;}
+      .pulse{animation:pulse 4.8s ease-in-out infinite;}
+      @keyframes flow{to{stroke-dashoffset:-28;}}
+      @keyframes pulse{0%,100%{opacity:.72}50%{opacity:1}}
+      @media (prefers-reduced-motion: reduce){.flow,.pulse{animation:none;}}
+    </style>
+
+    <linearGradient id="markGrad" x1="66" y1="92" x2="112" y2="138" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#18A8FF" />
+      <stop offset="0.68" stop-color="#4BD8FF" />
+      <stop offset="1" stop-color="#79E7E0" />
+    </linearGradient>
+    <radialGradient id="glowBrand" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4DA3FF" stop-opacity="0.55" />
+      <stop offset="1" stop-color="#4DA3FF" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glowCyan" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.38" />
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0" />
+    </radialGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1L8 5L1 9" fill="none" stroke="#4DA3FF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+    </marker>
+    <clipPath id="round"><rect x="2" y="2" width="1196" height="396" rx="22" /></clipPath>
+  </defs>
+
+  <g clip-path="url(#round)">
+    <rect width="1200" height="400" fill="#0A0E18" />
+    <ellipse cx="150" cy="60" rx="420" ry="320" fill="url(#glowBrand)" opacity="0.5" />
+    <ellipse cx="1080" cy="380" rx="520" ry="360" fill="url(#glowCyan)" opacity="0.5" />
+    <rect width="1200" height="2" fill="#FFFFFF" opacity="0.05" />
+  </g>
+  <rect x="2" y="2" width="1196" height="396" rx="22" fill="none" stroke="#1E2A40" stroke-width="1.5" />
+  <line x1="500" y1="46" x2="500" y2="354" stroke="#1E2A40" stroke-width="1.5" />
+
+  <g>
+    <rect x="54" y="42" width="146" height="26" rx="13" fill="#063042" stroke="#1F6F8E" stroke-width="1.25" />
+    <text class="sans" x="68" y="60" font-size="13" fill="#F4F8FF" font-weight="800">macOS · OFFLINE</text>
+  </g>
+
+  <g>
+    <rect x="54" y="78" width="70" height="70" rx="16" fill="#0F1626" stroke="#2A3A56" stroke-width="1.25" />
+    <rect x="55" y="79" width="68" height="68" rx="15" fill="none" stroke="#4BD8FF" stroke-opacity="0.14" class="pulse" />
+    <path d="M72 94h34a8 8 0 0 1 8 8v16a8 8 0 0 1 -8 8h-20l-10 9v-9h-4a8 8 0 0 1 -8 -8v-16a8 8 0 0 1 8 -8z" fill="none" stroke="url(#markGrad)" stroke-width="4.5" stroke-linejoin="round" />
+    <line x1="76" y1="106" x2="102" y2="106" stroke="#F4F8FF" stroke-width="4.5" stroke-linecap="round" opacity="0.92" />
+    <line x1="76" y1="115" x2="94" y2="115" stroke="#F4F8FF" stroke-width="4.5" stroke-linecap="round" opacity="0.6" />
+  </g>
+
+  <text class="sans" x="142" y="108" font-size="36" font-weight="800" fill="#4BD8FF">telegram</text>
+  <text class="sans" x="142" y="146" font-size="36" font-weight="800" fill="#E9EFF8">message-exporter</text>
+
+  <text class="sans" x="54" y="200" font-size="22" font-weight="700" fill="#E9EFF8" letter-spacing="-0.3">Recover chats from Telegram for macOS</text>
+  <text class="sans" x="54" y="228" font-size="14.5" fill="#8C99B0">Decrypts the local cache. Nothing leaves the Mac.</text>
+  <line x1="54" y1="252" x2="450" y2="252" stroke="#1E2A40" stroke-width="1.25" />
+
+  <g class="mono" font-size="13" font-weight="600">
+    <text x="54" y="282" fill="#22D3EE">discover</text>
+    <text x="123.4" y="282" fill="#3A4760">/</text>
+    <text x="138.2" y="282" fill="#34D399">decrypt</text>
+    <text x="199.8" y="282" fill="#3A4760">/</text>
+    <text x="214.6" y="282" fill="#818CF8">list-peers</text>
+    <text x="299.6" y="282" fill="#3A4760">/</text>
+    <text x="314.4" y="282" fill="#FBBF24">export</text>
+    <text x="368.2" y="282" fill="#3A4760">/</text>
+    <text x="383" y="282" fill="#94A3B8">diagnose</text>
+  </g>
+
+  <g>
+    <rect x="54" y="300" width="396" height="64" rx="11" fill="#0C1220" stroke="#22304A" stroke-width="1.25" />
+    <rect x="54" y="300" width="396" height="22" rx="11" fill="#FFFFFF" opacity="0.02" />
+    <circle cx="71" cy="316" r="4" fill="#FF5F57" />
+    <circle cx="85" cy="316" r="4" fill="#FEBC2E" />
+    <circle cx="99" cy="316" r="4" fill="#28C840" />
+    <text class="mono" x="71" y="348" font-size="12.5">
+      <tspan fill="#56627C">$ </tspan><tspan fill="#4DA3FF" font-weight="600">telegram-exporter</tspan><tspan fill="#FBBF24" font-weight="600"> export</tspan><tspan fill="#8C99B0"> --format html</tspan>
+    </text>
+  </g>
+
+  <g>
+    <rect x="510" y="44" width="652" height="312" rx="18" fill="#0E1422" stroke="#1E2A40" stroke-width="1.25" />
+    <circle cx="540" cy="74" r="3.5" fill="#34D399" />
+    <text class="mono" x="552" y="78" font-size="13" fill="#8C99B0">telegram-exporter - recovery run</text>
+    <text class="mono" x="1138" y="78" text-anchor="end" font-size="11.5" fill="#56627C">4 steps - local only</text>
+
+    <g>
+      <rect x="532" y="132" width="96" height="54" rx="11" fill="#121A2B" stroke="#274064" stroke-width="1.25" />
+      <text class="mono" x="580" y="156" text-anchor="middle" font-size="12.5" font-weight="600" fill="#E9EFF8">Mac cache</text>
+      <text class="mono" x="580" y="172" text-anchor="middle" font-size="10.5" fill="#56627C">db_sqlite</text>
+    </g>
+
+    <line x1="628" y1="159" x2="660" y2="159" stroke="#274064" stroke-width="2" />
+    <line class="flow" x1="628" y1="159" x2="662" y2="159" stroke="#4DA3FF" stroke-width="2" />
+    <line x1="668" y1="159" x2="986" y2="159" stroke="#243450" stroke-width="2.5" stroke-linecap="round" />
+    <line class="flow" x1="668" y1="159" x2="986" y2="159" stroke="#4DA3FF" stroke-width="2.5" stroke-linecap="round" opacity="0.85" />
+
+    <g>
+      <text class="mono" x="668" y="122" text-anchor="middle" font-size="9.5" fill="#56627C">key + db</text>
+      <text class="mono" x="668" y="138" text-anchor="middle" font-size="12.5" font-weight="700" fill="#22D3EE">discover</text>
+      <circle cx="668" cy="159" r="13" fill="#0E1422" stroke="#22D3EE" stroke-width="2" />
+      <text class="mono" x="668" y="163.5" text-anchor="middle" font-size="12" font-weight="700" fill="#22D3EE">1</text>
+    </g>
+    <g>
+      <text class="mono" x="774" y="122" text-anchor="middle" font-size="9.5" fill="#56627C">SQLCipher</text>
+      <text class="mono" x="774" y="138" text-anchor="middle" font-size="12.5" font-weight="700" fill="#34D399">decrypt</text>
+      <circle cx="774" cy="159" r="13" fill="#0E1422" stroke="#34D399" stroke-width="2" />
+      <text class="mono" x="774" y="163.5" text-anchor="middle" font-size="12" font-weight="700" fill="#34D399">2</text>
+    </g>
+    <g>
+      <text class="mono" x="880" y="122" text-anchor="middle" font-size="9.5" fill="#56627C">find chat</text>
+      <text class="mono" x="880" y="138" text-anchor="middle" font-size="12.5" font-weight="700" fill="#818CF8">list-peers</text>
+      <circle cx="880" cy="159" r="13" fill="#0E1422" stroke="#818CF8" stroke-width="2" />
+      <text class="mono" x="880" y="163.5" text-anchor="middle" font-size="12" font-weight="700" fill="#818CF8">3</text>
+    </g>
+    <g>
+      <text class="mono" x="986" y="122" text-anchor="middle" font-size="9.5" fill="#56627C">transcript</text>
+      <text class="mono" x="986" y="138" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FBBF24">export</text>
+      <circle cx="986" cy="159" r="13" fill="#0E1422" stroke="#FBBF24" stroke-width="2" />
+      <text class="mono" x="986" y="163.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FBBF24">4</text>
+    </g>
+
+    <line x1="999" y1="159" x2="1028" y2="159" stroke="#274064" stroke-width="2" />
+    <line class="flow" x1="999" y1="159" x2="1030" y2="159" stroke="#4DA3FF" stroke-width="2" marker-end="url(#arrow)" />
+
+    <g>
+      <rect x="1032" y="112" width="104" height="28" rx="9" fill="#101A2E" stroke="#3D7DCF" stroke-width="1.4" />
+      <circle cx="1048" cy="126" r="3.5" fill="#4DA3FF" />
+      <text class="mono" x="1059" y="130.5" font-size="12" font-weight="700" fill="#E9EFF8">HTML</text>
+    </g>
+    <g>
+      <rect x="1032" y="145" width="104" height="28" rx="9" fill="#121A2B" stroke="#2B3A56" stroke-width="1.25" />
+      <circle cx="1048" cy="159" r="3.5" fill="#56627C" />
+      <text class="mono" x="1059" y="163.5" font-size="12" font-weight="600" fill="#8C99B0">Markdown</text>
+    </g>
+    <g>
+      <rect x="1032" y="178" width="104" height="28" rx="9" fill="#121A2B" stroke="#2B3A56" stroke-width="1.25" />
+      <circle cx="1048" cy="192" r="3.5" fill="#56627C" />
+      <text class="mono" x="1059" y="196.5" font-size="12" font-weight="600" fill="#8C99B0">CSV</text>
+    </g>
+
+    <g stroke="#2B3A56" stroke-width="1.5" stroke-linecap="round">
+      <line x1="774" y1="173" x2="774" y2="218" />
+      <line x1="880" y1="173" x2="880" y2="218" />
+      <line x1="986" y1="173" x2="986" y2="218" />
+    </g>
+    <line x1="774" y1="218" x2="986" y2="218" stroke="#2B3A56" stroke-width="1.5" stroke-linecap="round" />
+    <line x1="880" y1="218" x2="880" y2="232" stroke="#2B3A56" stroke-width="1.5" stroke-linecap="round" />
+    <g fill="#56627C">
+      <circle cx="774" cy="173" r="2" />
+      <circle cx="880" cy="173" r="2" />
+      <circle cx="986" cy="173" r="2" />
+    </g>
+
+    <g>
+      <rect x="810" y="232" width="140" height="34" rx="9" fill="#101725" stroke="#2F4163" stroke-width="1.25" />
+      <path d="M827 242h9l4 4v8a1.5 1.5 0 0 1 -1.5 1.5h-11.5a1.5 1.5 0 0 1 -1.5 -1.5v-10.5a1.5 1.5 0 0 1 1.5 -1.5z" fill="none" stroke="#79E7E0" stroke-width="1.3" stroke-linejoin="round" />
+      <text class="mono" x="848" y="253.5" font-size="12.5" font-weight="600" fill="#E9EFF8">plaintext.db</text>
+    </g>
+    <text class="mono" x="880" y="284" text-anchor="middle" font-size="10.5" fill="#56627C">decrypted working copy that every later step reads</text>
+
+    <line x1="532" y1="312" x2="1138" y2="312" stroke="#1A2438" stroke-width="1" />
+    <text class="mono" x="532" y="336" font-size="10.5" fill="#3F4C66">no network - nothing written back</text>
+    <text class="mono" x="1138" y="336" text-anchor="end" font-size="10.5" fill="#3F4C66">github.com/soakes/telegram-message-exporter</text>
+  </g>
+</svg>

@@ -1,25 +1,37 @@
-# telegram-message-exporter
-
-<p>
-  <a href="https://github.com/soakes/telegram-message-exporter/actions/workflows/build-and-validate.yml"><img src="https://img.shields.io/github/actions/workflow/status/soakes/telegram-message-exporter/build-and-validate.yml?branch=main&style=flat-square&label=validate" alt="Validate"></a>
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+"></a>
-  <a href="https://macos.telegram.org/"><img src="https://img.shields.io/badge/Telegram-macOS-2CA5E0?style=flat-square&logo=telegram&logoColor=white" alt="Telegram for macOS"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea043?style=flat-square" alt="MIT License"></a>
+<p align="center">
+  <img src="assets/telegram-message-exporter-readme-hero.svg" width="960" alt="telegram-message-exporter - offline chat recovery for Telegram for macOS">
 </p>
 
-Telegram for macOS keeps an encrypted cache of your chats on disk. When a chat
-has been deleted from Telegram, that cache can be the last copy left on the
-Mac. telegram-message-exporter decrypts it and writes the messages out as HTML,
-Markdown or CSV, with any attachments that are still cached.
+<p align="center">
+  <a href="https://github.com/soakes/telegram-message-exporter/actions/workflows/build-and-validate.yml"><img src="https://img.shields.io/github/actions/workflow/status/soakes/telegram-message-exporter/build-and-validate.yml?branch=main&style=flat-square&label=validate" alt="Validate"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB.svg?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+"></a>
+  <a href="https://macos.telegram.org/"><img src="https://img.shields.io/badge/Telegram-macOS-2CA5E0.svg?style=flat-square&logo=telegram&logoColor=white" alt="Telegram for macOS"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2EA043.svg?style=flat-square" alt="License"></a>
+  <a href="https://buymeacoffee.com/soakes"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00.svg?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy Me a Coffee"></a>
+</p>
 
-Everything happens offline. The tool never talks to Telegram or any other
-service, and it never writes anything back into the app.
+---
+
+**telegram-message-exporter** recovers chats from the encrypted cache that
+Telegram for macOS keeps on disk. When a chat has been deleted from Telegram,
+that cache can be the last copy left on the Mac. The tool decrypts it and
+writes the messages out as HTML, Markdown or CSV, along with any attachments
+that are still cached.
+
+It works entirely offline. It never contacts Telegram or any other service,
+and it never writes anything back into the app.
 
 It supports the native Telegram for macOS app, the one from
 [macos.telegram.org](https://macos.telegram.org/) or the Homebrew `telegram`
 cask. The Mac App Store build, Telegram Desktop (the cross-platform Qt app),
 phone backups and Telegram's own data export all store messages differently,
 and none of them will work here.
+
+> **Unofficial tool, not affiliated with [Telegram](https://telegram.org).**
+
+**Quick links:** [Install](#install) · [Find the files](#find-the-telegram-files) · [Decrypt](#decrypt-the-database) · [Export](#export-a-chat) · [Troubleshooting](#when-it-doesnt-work) · [Development](#development)
+
+---
 
 ## Before you start
 
