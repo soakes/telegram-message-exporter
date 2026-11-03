@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+
+import pytest
+
 from telegram_message_exporter.paths import discover_telegram_paths
 
 
@@ -39,3 +43,24 @@ def test_discover_telegram_paths_reports_missing_optional_paths(tmp_path) -> Non
     assert len(discovery.accounts) == 1
     assert discovery.accounts[0].db_path is None
     assert discovery.accounts[0].media_dir is None
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_discover_telegram_paths_raises_when_root_cannot_be_listed(tmp_path) -> None:
+    root = tmp_path / "stable"
+    (root / "account-123").mkdir(parents=True)
+    (root / ".tempkeyEncrypted").write_bytes(b"encrypted")
+    # Like the macOS privacy block: entries can be stat'd but not listed.
+    root.chmod(0o300)
+    try:
+        with pytest.raises(PermissionError):
+            discover_telegram_paths(root)
+    finally:
+        root.chmod(0o700)
+
+
+def test_discover_telegram_paths_tolerates_missing_root(tmp_path) -> None:
+    discovery = discover_telegram_paths(tmp_path / "missing")
+
+    assert discovery.encrypted_key_path is None
+    assert discovery.accounts == ()

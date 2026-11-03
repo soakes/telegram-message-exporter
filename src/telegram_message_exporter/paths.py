@@ -39,7 +39,14 @@ def discover_telegram_paths(root: Path | None = None) -> TelegramPathDiscovery:
     raw_key = _existing_file(root_path / ".tempkey")
     accounts = []
 
-    for account_dir in sorted(root_path.glob("account-*")):
+    # Path.glob swallows a PermissionError and returns nothing, which would
+    # report a folder macOS refused to list as having no accounts.
+    account_dirs = (
+        sorted(path for path in root_path.iterdir() if path.name.startswith("account-"))
+        if root_path.is_dir()
+        else []
+    )
+    for account_dir in account_dirs:
         if not account_dir.is_dir():
             continue
         postbox_dir = account_dir / "postbox"

@@ -450,7 +450,20 @@ def main() -> None:
         parser.print_help()
         return
     args = parser.parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except PermissionError as exc:
+        raise SystemExit(_permission_hint(exc)) from exc
+
+
+def _permission_hint(exc: PermissionError) -> str:
+    """Explain the macOS privacy block that usually causes a PermissionError."""
+    return (
+        f"Permission denied: {exc.filename or exc}\n"
+        "macOS may be blocking this terminal from reading Telegram's data. Give the "
+        "terminal app Full Disk Access in System Settings > Privacy & Security > "
+        "Full Disk Access, restart it, and try again."
+    )
 
 
 if __name__ == "__main__":

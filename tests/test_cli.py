@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import os
 import sqlite3
+import sys
+
+import pytest
 
 from telegram_message_exporter.cli import (
     _format_discovery,
     _referenced_peer_ids,
     _resolve_media_dir,
     build_parser,
+    main,
 )
 from telegram_message_exporter.db import FetchOptions
 from telegram_message_exporter.models import ForwardInfo, Message
@@ -65,6 +70,25 @@ def test_format_discovery_reports_no_accounts(tmp_path) -> None:
     output = "\n".join(_format_discovery(discover_telegram_paths(tmp_path)))
 
     assert "No account-* directories found." in output
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_main_explains_permission_denied(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "stable"
+    root.mkdir()
+    root.chmod(0o300)
+    monkeypatch.setattr(
+        sys, "argv", ["telegram-exporter", "discover", "--root", str(root)]
+    )
+    try:
+        with pytest.raises(SystemExit) as excinfo:
+            main()
+    finally:
+        root.chmod(0o700)
+
+    message = str(excinfo.value.code)
+    assert f"Permission denied: {root}" in message
+    assert "Full Disk Access" in message
 
 
 def test_resolve_media_dir_autodetects_sibling_media(tmp_path) -> None:
