@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 TELEGRAM_CONTAINER = "6N38VWS5BX.ru.keepcoder.Telegram"
 
@@ -14,8 +13,8 @@ class DiscoveredAccount:
     """Useful paths below one Telegram account directory."""
 
     account_dir: Path
-    db_path: Optional[Path]
-    media_dir: Optional[Path]
+    db_path: Path | None
+    media_dir: Path | None
 
 
 @dataclass(frozen=True)
@@ -23,8 +22,8 @@ class TelegramPathDiscovery:
     """Useful paths below a Telegram storage root."""
 
     root: Path
-    encrypted_key_path: Optional[Path]
-    raw_key_path: Optional[Path]
+    encrypted_key_path: Path | None
+    raw_key_path: Path | None
     accounts: tuple[DiscoveredAccount, ...]
 
 
@@ -33,7 +32,7 @@ def default_telegram_root() -> Path:
     return Path.home() / "Library" / "Group Containers" / TELEGRAM_CONTAINER / "stable"
 
 
-def discover_telegram_paths(root: Optional[Path] = None) -> TelegramPathDiscovery:
+def discover_telegram_paths(root: Path | None = None) -> TelegramPathDiscovery:
     """Discover bounded Telegram key, database, and media paths."""
     root_path = (root or default_telegram_root()).expanduser()
     encrypted_key = _existing_file(root_path / ".tempkeyEncrypted")
@@ -60,9 +59,9 @@ def discover_telegram_paths(root: Optional[Path] = None) -> TelegramPathDiscover
     )
 
 
-def _existing_file(path: Path) -> Optional[Path]:
+def _existing_file(path: Path) -> Path | None:
     return path if path.is_file() else None
 
 
-def _existing_dir(path: Path) -> Optional[Path]:
+def _existing_dir(path: Path) -> Path | None:
     return path if path.is_dir() else None

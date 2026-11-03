@@ -2,7 +2,7 @@
 
 > Offline recovery and transcript export for the native Telegram for macOS app.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/soakes/telegram-message-exporter/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/soakes/telegram-message-exporter/actions/workflows/ci.yml)
+[![Validate](https://img.shields.io/github/actions/workflow/status/soakes/telegram-message-exporter/build-and-validate.yml?branch=main&style=flat-square&label=validate)](https://github.com/soakes/telegram-message-exporter/actions/workflows/build-and-validate.yml)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-macOS-111111.svg?style=flat-square&logo=apple&logoColor=white)](#requirements)
 [![Telegram](https://img.shields.io/badge/Telegram-native%20macOS-2CA5E0.svg?style=flat-square&logo=telegram&logoColor=white)](https://macos.telegram.org/)
@@ -594,11 +594,12 @@ Use the helper script when preparing a version bump:
 
 ## 🧹 Quality Checks
 
-The CI workflow runs Black, Ruff, Pylint, and pytest across Python 3.10 through
-3.14.
+The Build and Validate workflow runs Black, Ruff, Pylint, pytest, a package
+build, and a CLI smoke test across Python 3.10 through 3.14. The tool versions
+are pinned in the `dev` extra so local runs match CI.
 
 ```bash
-pip install black ruff pylint pytest
+pip install -e '.[dev]'
 black --check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
 ruff check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
 pylint src/telegram_message_exporter telegram_exporter.py
@@ -618,8 +619,9 @@ telegram-message-exporter/
 │   ├── scripts/
 │   │   └── bump_version.py            # Version helper
 │   └── workflows/
-│       └── ci.yml                     # Python lint matrix
-├── pyproject.toml                     # Packaging metadata and CLI entrypoint
+│       ├── build-and-validate.yml     # Lint, test, and build matrix
+│       └── dependabot-merge.yml       # Merges validated Dependabot updates
+├── pyproject.toml                     # Packaging metadata, dev tools, and lint config
 ├── telegram_exporter.py               # Convenience wrapper for source checkouts
 ├── src/
 │   └── telegram_message_exporter/

@@ -5,23 +5,22 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Tuple
 
 VERSION_PATH = Path(__file__).resolve().parents[2] / "VERSION"
 
 
-def parse_version(value: str) -> Tuple[int, int, int]:
+def parse_version(value: str) -> tuple[int, int, int]:
     parts = value.strip().split(".")
     if len(parts) != 3:
         raise ValueError("Version must be in MAJOR.MINOR.PATCH format")
     return tuple(int(part) for part in parts)  # type: ignore[return-value]
 
 
-def format_version(version: Tuple[int, int, int]) -> str:
+def format_version(version: tuple[int, int, int]) -> str:
     return f"{version[0]}.{version[1]}.{version[2]}"
 
 
-def bump(version: Tuple[int, int, int], kind: str) -> Tuple[int, int, int]:
+def bump(version: tuple[int, int, int], kind: str) -> tuple[int, int, int]:
     major, minor, patch = version
     if kind == "major":
         return major + 1, 0, 0

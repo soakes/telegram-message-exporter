@@ -5,11 +5,9 @@ from __future__ import annotations
 
 import argparse
 import shlex
+import sqlite3
 import sys
 from pathlib import Path
-from typing import Optional
-
-import sqlite3
 
 from . import __version__, crypto
 from .db import (
@@ -32,13 +30,13 @@ from .exporters import (
     render_html,
     render_markdown,
 )
+from .paths import TelegramPathDiscovery, discover_telegram_paths
 from .postbox import (
     PostboxMediaResolver,
     iter_postbox_messages,
     list_peers_postbox,
     load_peer_map,
 )
-from .paths import TelegramPathDiscovery, discover_telegram_paths
 from .schema import PostboxTable
 from .utils import parse_date_input
 
@@ -150,7 +148,7 @@ def cmd_export(args: argparse.Namespace) -> None:
         end_ts=parse_date_input(args.end_date, end=True),
     )
 
-    peer_map: Optional[dict[int, str]] = None
+    peer_map: dict[int, str] | None = None
     if is_postbox_kv_table(conn, table):
         messages, peer_map = _load_postbox_export(conn, table, options, tables, args)
     else:
@@ -231,7 +229,7 @@ def _load_postbox_export(
     return messages, load_peer_map(peer_rows)
 
 
-def _title_from_peer(peer_map: Optional[dict[int, str]], peer_id: Optional[int]) -> str:
+def _title_from_peer(peer_map: dict[int, str] | None, peer_id: int | None) -> str:
     if peer_map and peer_id and peer_id in peer_map:
         return peer_map[peer_id]
     if peer_id is not None:
@@ -295,7 +293,7 @@ def _format_discovery(discovery: TelegramPathDiscovery) -> list[str]:
     return lines
 
 
-def _path_status(label: str, path: Optional[Path]) -> str:
+def _path_status(label: str, path: Path | None) -> str:
     return f"{label}: {path if path else 'not found'}"
 
 
@@ -303,7 +301,7 @@ def _quote_path(path: Path) -> str:
     return shlex.quote(str(path))
 
 
-def _resolve_media_dir(value: Optional[str], db_path: Path) -> Optional[Path]:
+def _resolve_media_dir(value: str | None, db_path: Path) -> Path | None:
     if value:
         media_dir = Path(value).expanduser()
         if not media_dir.is_dir():
@@ -316,7 +314,7 @@ def _resolve_media_dir(value: Optional[str], db_path: Path) -> Optional[Path]:
     return None
 
 
-def _referenced_peer_ids(messages, requested_peer_id: Optional[int]) -> set[int]:
+def _referenced_peer_ids(messages, requested_peer_id: int | None) -> set[int]:
     peer_ids = {requested_peer_id} if requested_peer_id is not None else set()
     for message in messages:
         for peer_id in (message.peer_id, message.author_id):
@@ -336,10 +334,10 @@ def _referenced_peer_ids(messages, requested_peer_id: Optional[int]) -> set[int]
 
 def _resolve_peer_id(
     conn,
-    contact: Optional[str],
-    peer_id: Optional[int],
-    tables: Optional[list[str]] = None,
-) -> Optional[int]:
+    contact: str | None,
+    peer_id: int | None,
+    tables: list[str] | None = None,
+) -> int | None:
     if not contact or peer_id is not None:
         return peer_id
 
@@ -357,7 +355,7 @@ def _resolve_peer_id(
 def _search_contact_matches(
     conn,
     contact: str,
-    tables: Optional[list[str]] = None,
+    tables: list[str] | None = None,
 ) -> list[tuple[str, int, str]]:
     tables = tables or list_tables(conn)
     peer_table = PostboxTable.PEER.sqlite_name
