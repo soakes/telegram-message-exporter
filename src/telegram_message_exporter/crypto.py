@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Optional, Protocol
-
 import hashlib
 import importlib
 import os
 import struct
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
 
 from .hashing import TEMPKEY_MURMUR_SEED, murmur_hash, murmur_hash_bytes
 
@@ -45,7 +45,7 @@ class KeyDerivationInfo:
 
     candidates: tuple[KeyCandidate, ...]
     tempkey_ok: bool
-    local_key: Optional[bytes]
+    local_key: bytes | None
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ class SqlCipherProfile:
     """SQLCipher profile parameters."""
 
     name: str
-    compat: Optional[int]
+    compat: int | None
     pragmas: dict[str, str | int]
     compat_before_key: bool = False
 
@@ -62,7 +62,7 @@ class SqlCipherProfile:
 class SqlCipherMatch:
     """Match details for a successful SQLCipher open."""
 
-    connection: "SqlCipherConnection"
+    connection: SqlCipherConnection
     candidate: KeyCandidate
     profile: SqlCipherProfile
 
@@ -85,7 +85,7 @@ class SqlCipherConnection(Protocol):
         """Close the connection."""
 
 
-def read_passcodes(value: Optional[str]) -> list[bytes]:
+def read_passcodes(value: str | None) -> list[bytes]:
     """Resolve passcodes from CLI or environment."""
     if value is not None:
         return [value.encode("utf-8")]
@@ -100,7 +100,7 @@ def _tempkey_kdf(passcode: bytes) -> tuple[bytes, bytes]:
     return digest[:32], digest[-16:]
 
 
-def _parse_tempkey(encrypted: bytes, passcode: bytes) -> Optional[bytes]:
+def _parse_tempkey(encrypted: bytes, passcode: bytes) -> bytes | None:
     """Parse Telegram Desktop .tempkeyEncrypted -> dbKey + dbSalt."""
     if len(encrypted) % 16 != 0:
         return None
@@ -135,7 +135,7 @@ def _valid_local_key(candidate: bytes) -> bool:
     return 16 <= len(candidate) <= 64
 
 
-def _decrypt_key_cbc(encrypted: bytes, passcode: bytes) -> Optional[bytes]:
+def _decrypt_key_cbc(encrypted: bytes, passcode: bytes) -> bytes | None:
     if len(encrypted) < 32:
         return None
     key = hashlib.sha512(passcode).digest()[:32]
@@ -156,7 +156,7 @@ def _decrypt_key_cbc(encrypted: bytes, passcode: bytes) -> Optional[bytes]:
     return local_key if _valid_local_key(local_key) else None
 
 
-def _decrypt_key_ige(encrypted: bytes, passcode: bytes) -> Optional[bytes]:
+def _decrypt_key_ige(encrypted: bytes, passcode: bytes) -> bytes | None:
     if len(encrypted) < 64:
         return None
     key = hashlib.sha512(passcode).digest()[:32]
@@ -181,16 +181,16 @@ def _decrypt_ige_fallback(key: bytes, iv: bytes, payload: bytes) -> bytes:
     out = bytearray()
     for offset in range(0, len(payload), 16):
         c_block = payload[offset : offset + 16]
-        xored = bytes(a ^ b for a, b in zip(c_block, p_prev))
+        xored = bytes(a ^ b for a, b in zip(c_block, p_prev, strict=True))
         y = ecb.decrypt(xored)
-        p_block = bytes(a ^ b for a, b in zip(y, c_prev))
+        p_block = bytes(a ^ b for a, b in zip(y, c_prev, strict=True))
         out.extend(p_block)
         c_prev = c_block
         p_prev = p_block
     return bytes(out)
 
 
-def decrypt_local_key(key_path: Path, passcodes: Iterable[bytes]) -> Optional[bytes]:
+def decrypt_local_key(key_path: Path, passcodes: Iterable[bytes]) -> bytes | None:
     """Attempt legacy CBC/IGE decryption for .tempkeyEncrypted."""
     encrypted = key_path.read_bytes()
     for passcode in passcodes:
@@ -369,7 +369,7 @@ def open_sqlcipher_connection(
     db_path: Path,
     candidates: Iterable[KeyCandidate],
     profiles: Iterable[SqlCipherProfile],
-) -> Optional[SqlCipherMatch]:
+) -> SqlCipherMatch | None:
     """Attempt to open the encrypted database with candidate keys."""
     for candidate in candidates:
         for profile in profiles:

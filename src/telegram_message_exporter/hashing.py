@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Final
-
 import importlib
+from typing import Final
 
 try:
     mmh3 = importlib.import_module("mmh3")

@@ -5,12 +5,11 @@ from __future__ import annotations
 import html
 import re
 from datetime import date, datetime, time
-from typing import Optional
 
 URL_RE = re.compile(r"(https?://[^\s<]+)")
 
 
-def parse_timestamp(value: object) -> Optional[datetime]:
+def parse_timestamp(value: object) -> datetime | None:
     """Parse a unix timestamp (seconds or milliseconds) into datetime."""
     if value is None:
         return None
@@ -28,7 +27,7 @@ def parse_timestamp(value: object) -> Optional[datetime]:
         return None
 
 
-def parse_date_input(value: Optional[str], end: bool = False) -> Optional[int]:
+def parse_date_input(value: str | None, end: bool = False) -> int | None:
     """Convert a date string or timestamp to epoch seconds.
 
     Supports:
