@@ -182,8 +182,8 @@ transcript.
 
 ```bash
 pip install -e '.[dev]'
-black --check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
-ruff check src/telegram_message_exporter tests telegram_exporter.py .github/scripts/bump_version.py
+black --check src/telegram_message_exporter tests telegram_exporter.py .github/scripts
+ruff check src/telegram_message_exporter tests telegram_exporter.py .github/scripts
 pylint src/telegram_message_exporter telegram_exporter.py
 pytest -q
 ```
@@ -196,6 +196,12 @@ automatically once they pass.
 The version lives in [`VERSION`](VERSION). To change it, run
 `.github/scripts/bump_version.py patch`, `minor` or `major`, or pass
 `--set 1.2.3`.
+
+The animated terminal at the top of this page is generated. Edit the session
+in `.github/scripts/build_readme_hero.py` or the layout in
+`.github/scripts/readme-hero.template.svg`, then run the script to rebuild
+`assets/telegram-message-exporter-readme-hero.svg`. It downloads the font
+subsets from Google Fonts, so it needs network access.
 
 ## Credits
 
