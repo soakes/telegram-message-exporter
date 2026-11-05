@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/telegram-message-exporter-readme-hero.svg" width="960" alt="telegram-message-exporter - offline chat recovery for Telegram for macOS">
+  <img src="assets/telegram-message-exporter-readme-hero.svg" width="960" alt="telegram-message-exporter - deleted from Telegram doesn't mean gone. Decrypts a copy of the db_sqlite cache, fully offline, and exports chats as HTML, Markdown or CSV with cached media.">
 </p>
 
 <p align="center">
@@ -237,11 +237,17 @@ The version lives in [`VERSION`](VERSION). To change it, run
 `.github/scripts/bump_version.py patch`, `minor` or `major`, or pass
 `--set 1.2.3`.
 
-The animated terminal at the top of this page is generated. Edit the session
-in `.github/scripts/build_readme_hero.py` or the layout in
-`.github/scripts/readme-hero.template.svg`, then run the script to rebuild
-`assets/telegram-message-exporter-readme-hero.svg`. It downloads the font
-subsets from Google Fonts, so it needs network access.
+The banner at the top of this page and the social card are generated. Edit the
+copy, layout or timing in `scripts/readme/build_readme_hero.py` and run
+`make readme-hero`. That rebuilds
+`assets/telegram-message-exporter-readme-hero.svg` and
+`assets/telegram-message-exporter-social-card.png`, which is the image for
+GitHub's social preview and is uploaded by hand in the repository settings. It
+runs the script with `uv`, which installs the pinned fontTools it subsets the
+fonts with, and renders the card with headless Chrome or Chromium. The fonts
+come from assets.netspeedy.io, so the first run needs network access. If you
+change the headline's words, measure them again with
+`uv run scripts/readme/measure_headline.py`.
 
 ## Credits
 
